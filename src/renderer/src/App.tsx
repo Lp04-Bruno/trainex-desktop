@@ -233,7 +233,9 @@ function App(): React.ReactElement {
           <button className="btn btn--ghost" onClick={exportCsv} disabled={events.length === 0}>
             Export CSV
           </button>
-          <div className="status">{status}</div>
+          <div className="status" title={status}>
+            {status}
+          </div>
         </div>
       </header>
 

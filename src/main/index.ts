@@ -3,6 +3,12 @@ import { join } from 'path'
 import fs from 'fs'
 import iconv from 'iconv-lite'
 import { syncTrainexIcs } from './trainexSync'
+import { createSyncLogger } from './syncLogger'
+
+const chromiumCacheDir = join(app.getPath('userData'), 'chromium-cache')
+fs.mkdirSync(chromiumCacheDir, { recursive: true })
+app.commandLine.appendSwitch('disk-cache-dir', chromiumCacheDir)
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 
 function configurePlaywrightBrowsersPath(): void {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH) return
@@ -116,12 +122,25 @@ ipcMain.handle(
       day: number
     }
   ) => {
-    const res = await syncTrainexIcs(args)
-    if (!res.ok) return res
+    const { log, logPath } = createSyncLogger(app.getPath('userData'))
+    log('sync:start', { month: args.month, year: args.year, day: args.day })
+
+    const profileDir = join(app.getPath('userData'), 'playwright', 'profile')
+    const cacheDir = join(app.getPath('userData'), 'playwright', 'cache')
+    fs.mkdirSync(profileDir, { recursive: true })
+    fs.mkdirSync(cacheDir, { recursive: true })
+
+    const res = await syncTrainexIcs({ ...args, log, profileDir, cacheDir })
+    if (!res.ok) {
+      log('sync:fail', { error: res.error, hasHint: Boolean(res.hint) })
+      const hint = res.hint ? `${res.hint} | Log: ${logPath}` : `Log: ${logPath}`
+      return { ...res, hint }
+    }
 
     const buffer = Buffer.from(res.icsBytesBase64, 'base64')
     const decoded = decodeIcsText(buffer)
     writeLastIcsCache(decoded)
+    log('sync:ok', { bytes: buffer.length, decodedChars: decoded.length })
     return { ok: true as const, icsText: decoded }
   }
 )
@@ -141,6 +160,13 @@ function writeLastIcsCache(icsText: string): void {
 }
 
 function decodeIcsText(buffer: Buffer): string {
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return iconv.decode(buffer, 'utf16le')
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return iconv.decode(buffer, 'utf16be')
+  }
+
   if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
     return buffer.toString('utf-8')
   }
