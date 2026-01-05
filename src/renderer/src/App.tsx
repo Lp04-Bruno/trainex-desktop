@@ -37,6 +37,31 @@ function addDays(date: Date, deltaDays: number): Date {
   return d
 }
 
+function formatStamp(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${y}${m}${day}-${hh}${mm}`
+}
+
+function csvEscape(value: string): string {
+  if (!/[",\n\r]/.test(value)) return value
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+function eventsToCsv(events: TrainexEvent[]): string {
+  const header = ['start', 'end', 'summary', 'location', 'description', 'categories']
+  const rows = events.map((ev) => {
+    const categories = ev.categories?.join(', ') ?? ''
+    return [ev.start, ev.end, ev.summary, ev.location ?? '', ev.description ?? '', categories].map(
+      csvEscape
+    )
+  })
+  return [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
+}
+
 function App(): React.ReactElement {
   const [events, setEvents] = React.useState<TrainexEvent[]>([])
   const [status, setStatus] = React.useState<string>('Noch keine Datei geladen.')
@@ -85,6 +110,30 @@ function App(): React.ReactElement {
       return
     }
     setStatus('Cache gelöscht.')
+  }
+
+  const exportJson = async (): Promise<void> => {
+    if (events.length === 0) {
+      setStatus('Keine Termine zum Exportieren.')
+      return
+    }
+
+    const suggestedName = `trainex-events-${formatStamp(new Date())}.json`
+    const jsonText = JSON.stringify(events, null, 2)
+    const res = await window.api.exportJson(suggestedName, jsonText)
+    if (res.ok) setStatus(`Exportiert: ${res.path}`)
+  }
+
+  const exportCsv = async (): Promise<void> => {
+    if (events.length === 0) {
+      setStatus('Keine Termine zum Exportieren.')
+      return
+    }
+
+    const suggestedName = `trainex-events-${formatStamp(new Date())}.csv`
+    const csvText = eventsToCsv(events)
+    const res = await window.api.exportCsv(suggestedName, csvText)
+    if (res.ok) setStatus(`Exportiert: ${res.path}`)
   }
 
   const buckets = React.useMemo<DayBucket[]>(() => {
@@ -138,6 +187,12 @@ function App(): React.ReactElement {
           </button>
           <button className="btn btn--ghost" onClick={clearCache}>
             Cache löschen
+          </button>
+          <button className="btn btn--ghost" onClick={exportJson} disabled={events.length === 0}>
+            Export JSON
+          </button>
+          <button className="btn btn--ghost" onClick={exportCsv} disabled={events.length === 0}>
+            Export CSV
           </button>
           <div className="status">{status}</div>
         </div>

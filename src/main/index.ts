@@ -70,6 +70,27 @@ ipcMain.handle('clear-cache', async () => {
   }
 })
 
+ipcMain.handle(
+  'export-text-file',
+  async (
+    _evt,
+    args: { suggestedName: string; filters: Electron.FileFilter[]; content: string }
+  ) => {
+    const { suggestedName, filters, content } = args
+    const result = await dialog.showSaveDialog({
+      defaultPath: join(app.getPath('downloads'), suggestedName),
+      filters
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { ok: false, canceled: true as const }
+    }
+
+    fs.writeFileSync(result.filePath, content, 'utf-8')
+    return { ok: true as const, path: result.filePath }
+  }
+)
+
 function getCacheDir(): string {
   return join(app.getPath('userData'), 'cache')
 }
