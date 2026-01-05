@@ -2,13 +2,19 @@
 
 Desktop app (Windows first) to view TraiNex schedules from iCal/ICS — without any server and without central data storage.
 
-## What it does (today)
+## What it does
 
 - Open a local `.ics` file (TraiNex export)
-- Parse VEVENT entries (SUMMARY/DTSTART/DTEND/LOCATION/DESCRIPTION/CATEGORIES)
-- Display a planner-like day agenda (day list + day navigation)
+- Display a planner-like agenda
 
-## Privacy goals
+## How to use
+
+1. Start the app
+2. Click **ICS auswählen** and choose your TraiNex `.ics` export
+3. Use the left sidebar to pick a day, or navigate with ←/→
+4. Optional: **Letzte laden** uses the local cache; **Cache löschen** clears it
+
+## Privacy
 
 - No server, no central database.
 - Each user uses their own TraiNex login.
@@ -54,15 +60,9 @@ npm run build:mac
 npm run build:linux
 ```
 
-## Roadmap (high level)
-
-- MVP 1: Export functions (JSON/CSV) + optional local cache
-- MVP 2: Auto-sync via browser automation (Playwright): login → click iCal export → download → parse
-- Packaging: Windows installer (.exe) via electron-builder
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Developer setup and scripts: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 

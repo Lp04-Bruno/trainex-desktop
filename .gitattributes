@@ -1,6 +1,3 @@
-# Keep line endings consistent across OS
 * text=auto eol=lf
-
-# Windows scripts can keep CRLF if you add any later
 *.cmd text eol=crlf
 *.bat text eol=crlf

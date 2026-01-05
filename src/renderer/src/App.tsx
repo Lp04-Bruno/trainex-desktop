@@ -2,7 +2,7 @@ import React from 'react'
 import { parseIcsToEvents, type TrainexEvent } from './lib/ics/parseIcs'
 
 type DayBucket = {
-  key: string // YYYY-MM-DD
+  key: string
   date: Date
   events: TrainexEvent[]
 }
@@ -42,20 +42,49 @@ function App(): React.ReactElement {
   const [status, setStatus] = React.useState<string>('Noch keine Datei geladen.')
   const [selectedDayKey, setSelectedDayKey] = React.useState<string | null>(null)
 
+  const applyIcsContent = (content: string): void => {
+    const parsed = parseIcsToEvents(content)
+    setEvents(parsed)
+    setStatus(`Geladen: ${parsed.length} Termine`)
+    setSelectedDayKey(parsed.length > 0 ? dayKeyFromIso(parsed[0].start) : null)
+    console.log('Parsed events:', parsed)
+  }
+
   const openFile = async (): Promise<void> => {
     const content = await window.api.openIcsFile()
     if (!content) return
 
     try {
-      const parsed = parseIcsToEvents(content)
-      setEvents(parsed)
-      setStatus(`Geladen: ${parsed.length} Termine`)
-      setSelectedDayKey(parsed.length > 0 ? dayKeyFromIso(parsed[0].start) : null)
-      console.log('Parsed events:', parsed)
+      applyIcsContent(content)
     } catch (e) {
       console.error(e)
       setStatus('Fehler beim Parsen der ICS-Datei. Siehe Konsole.')
     }
+  }
+
+  const loadLast = async (): Promise<void> => {
+    const content = await window.api.loadLastIcs()
+    if (!content) {
+      setStatus('Kein lokaler Cache vorhanden.')
+      return
+    }
+
+    try {
+      applyIcsContent(content)
+      setStatus((prev) => `${prev} (aus Cache)`)
+    } catch (e) {
+      console.error(e)
+      setStatus('Fehler beim Parsen der Cache-ICS. Siehe Konsole.')
+    }
+  }
+
+  const clearCache = async (): Promise<void> => {
+    const ok = await window.api.clearCache()
+    if (!ok) {
+      setStatus('Cache konnte nicht gelöscht werden.')
+      return
+    }
+    setStatus('Cache gelöscht.')
   }
 
   const buckets = React.useMemo<DayBucket[]>(() => {
@@ -70,7 +99,6 @@ function App(): React.ReactElement {
     const keys = Array.from(map.keys()).sort()
     return keys.map((key) => {
       const list = map.get(key) ?? []
-      // key is YYYY-MM-DD
       const [y, m, d] = key.split('-').map((n) => Number(n))
       return {
         key,
@@ -104,6 +132,12 @@ function App(): React.ReactElement {
         <div className="topbar__actions">
           <button className="btn" onClick={openFile}>
             ICS auswählen
+          </button>
+          <button className="btn btn--ghost" onClick={loadLast}>
+            Letzte laden
+          </button>
+          <button className="btn btn--ghost" onClick={clearCache}>
+            Cache löschen
           </button>
           <div className="status">{status}</div>
         </div>

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
+import iconv from 'iconv-lite'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -33,9 +34,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-/**
- * MVP 1: Open .ics file and return file content as string
- */
 ipcMain.handle('open-ics-file', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
@@ -47,6 +45,62 @@ ipcMain.handle('open-ics-file', async () => {
   }
 
   const filePath = result.filePaths[0]
-  const content = fs.readFileSync(filePath, 'utf-8')
+  const buffer = fs.readFileSync(filePath)
+  const content = decodeIcsText(buffer)
+  writeLastIcsCache(content)
   return content
 })
+
+ipcMain.handle('load-last-ics', async () => {
+  try {
+    const p = getLastIcsCachePath()
+    if (!fs.existsSync(p)) return null
+    return fs.readFileSync(p, 'utf-8')
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('clear-cache', async () => {
+  try {
+    fs.rmSync(getLastIcsCachePath(), { force: true })
+    return true
+  } catch {
+    return false
+  }
+})
+
+function getCacheDir(): string {
+  return join(app.getPath('userData'), 'cache')
+}
+
+function getLastIcsCachePath(): string {
+  return join(getCacheDir(), 'latest.ics')
+}
+
+function writeLastIcsCache(icsText: string): void {
+  const dir = getCacheDir()
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(getLastIcsCachePath(), icsText, 'utf-8')
+}
+
+function decodeIcsText(buffer: Buffer): string {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.toString('utf-8')
+  }
+
+  const asUtf8 = buffer.toString('utf-8')
+  const utf8ReplacementCount = (asUtf8.match(/\uFFFD/g) ?? []).length
+  if (utf8ReplacementCount > 0) {
+    return iconv.decode(buffer, 'win1252')
+  }
+
+  const mojibakeCount = (asUtf8.match(/[ÃÂ]/g) ?? []).length
+  if (mojibakeCount > 0) {
+    const asWin1252 = iconv.decode(buffer, 'win1252')
+    const winMojibakeCount = (asWin1252.match(/[ÃÂ]/g) ?? []).length
+    return winMojibakeCount < mojibakeCount ? asWin1252 : asUtf8
+  }
+
+  return asUtf8
+}
