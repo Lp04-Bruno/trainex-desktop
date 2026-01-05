@@ -4,6 +4,13 @@ contextBridge.exposeInMainWorld('api', {
   openIcsFile: () => ipcRenderer.invoke('open-ics-file'),
   loadLastIcs: () => ipcRenderer.invoke('load-last-ics'),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
+  syncTrainexIcs: (args: {
+    username: string
+    password: string
+    day: number
+    month: number
+    year: number
+  }) => ipcRenderer.invoke('sync-trainex-ics', args),
   exportJson: (suggestedName: string, jsonText: string) =>
     ipcRenderer.invoke('export-text-file', {
       suggestedName,

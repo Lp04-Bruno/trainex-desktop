@@ -6,6 +6,13 @@ declare global {
       openIcsFile: () => Promise<string | null>
       loadLastIcs: () => Promise<string | null>
       clearCache: () => Promise<boolean>
+      syncTrainexIcs: (args: {
+        username: string
+        password: string
+        day: number
+        month: number
+        year: number
+      }) => Promise<{ ok: true; icsText: string } | { ok: false; error: string; hint?: string }>
       exportJson: (
         suggestedName: string,
         jsonText: string

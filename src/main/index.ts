@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
 import iconv from 'iconv-lite'
+import { syncTrainexIcs } from './trainexSync'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -88,6 +89,28 @@ ipcMain.handle(
 
     fs.writeFileSync(result.filePath, content, 'utf-8')
     return { ok: true as const, path: result.filePath }
+  }
+)
+
+ipcMain.handle(
+  'sync-trainex-ics',
+  async (
+    _evt,
+    args: {
+      username: string
+      password: string
+      month: number
+      year: number
+      day: number
+    }
+  ) => {
+    const res = await syncTrainexIcs(args)
+    if (!res.ok) return res
+
+    const buffer = Buffer.from(res.icsBytesBase64, 'base64')
+    const decoded = decodeIcsText(buffer)
+    writeLastIcsCache(decoded)
+    return { ok: true as const, icsText: decoded }
   }
 )
 
