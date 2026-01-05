@@ -125,15 +125,21 @@ ipcMain.handle(
     const { log, logPath } = createSyncLogger(app.getPath('userData'))
     log('sync:start', { month: args.month, year: args.year, day: args.day })
 
+    const sendStatus = (text: string): void => {
+      mainWindow?.webContents.send('sync-status', { text })
+    }
+    sendStatus('Sync läuft…')
+
     const profileDir = join(app.getPath('userData'), 'playwright', 'profile')
     const cacheDir = join(app.getPath('userData'), 'playwright', 'cache')
     fs.mkdirSync(profileDir, { recursive: true })
     fs.mkdirSync(cacheDir, { recursive: true })
 
-    const res = await syncTrainexIcs({ ...args, log, profileDir, cacheDir })
+    const res = await syncTrainexIcs({ ...args, log, profileDir, cacheDir, status: sendStatus })
     if (!res.ok) {
       log('sync:fail', { error: res.error, hasHint: Boolean(res.hint) })
       const hint = res.hint ? `${res.hint} | Log: ${logPath}` : `Log: ${logPath}`
+      sendStatus(`Sync fehlgeschlagen. Log: ${logPath}`)
       return { ...res, hint }
     }
 
@@ -151,6 +157,7 @@ ipcMain.handle(
 
     writeLastIcsCache(decoded)
     log('sync:ok', { bytes: buffer.length, decodedChars: decoded.length })
+    sendStatus('Sync abgeschlossen.')
     return { ok: true as const, icsText: decoded }
   }
 )

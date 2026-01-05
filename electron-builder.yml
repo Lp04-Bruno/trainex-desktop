@@ -9,6 +9,9 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!dist/**'
+  - '!**/node_modules/playwright-core/.local-browsers/**'
+  - '!**/node_modules/playwright/.local-browsers/**'
 asarUnpack:
   - resources/**
 
@@ -20,6 +23,7 @@ win:
   signAndEditExecutable: false
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
+  compression: maximum
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

@@ -73,6 +73,21 @@ function App(): React.ReactElement {
   const [syncMonth, setSyncMonth] = React.useState<number>(today.getMonth() + 1)
   const [syncYear, setSyncYear] = React.useState<number>(today.getFullYear())
   const [syncBusy, setSyncBusy] = React.useState<boolean>(false)
+  const syncBusyRef = React.useRef<boolean>(false)
+
+  React.useEffect(() => {
+    syncBusyRef.current = syncBusy
+  }, [syncBusy])
+
+  React.useEffect(() => {
+    const unsub = window.api.onSyncStatus((text) => {
+      if (!syncBusyRef.current) return
+      setStatus(text)
+    })
+    return () => {
+      unsub()
+    }
+  }, [])
 
   const applyIcsContent = (content: string): void => {
     const parsed = parseIcsToEvents(content)

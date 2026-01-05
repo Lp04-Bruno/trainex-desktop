@@ -6,6 +6,7 @@ declare global {
       openIcsFile: () => Promise<string | null>
       loadLastIcs: () => Promise<string | null>
       clearCache: () => Promise<boolean>
+      onSyncStatus: (callback: (text: string) => void) => () => void
       syncTrainexIcs: (args: {
         username: string
         password: string

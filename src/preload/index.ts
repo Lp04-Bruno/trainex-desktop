@@ -4,6 +4,13 @@ contextBridge.exposeInMainWorld('api', {
   openIcsFile: () => ipcRenderer.invoke('open-ics-file'),
   loadLastIcs: () => ipcRenderer.invoke('load-last-ics'),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
+  onSyncStatus: (callback: (text: string) => void): (() => void) => {
+    const handler = (_evt: Electron.IpcRendererEvent, payload: { text: string }): void => {
+      callback(payload.text)
+    }
+    ipcRenderer.on('sync-status', handler)
+    return () => ipcRenderer.removeListener('sync-status', handler)
+  },
   syncTrainexIcs: (args: {
     username: string
     password: string

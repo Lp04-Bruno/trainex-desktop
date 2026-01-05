@@ -34,6 +34,29 @@ function ensurePlaywrightOptionalDepStub() {
   }
 }
 
+function removePlaywrightFfmpeg() {
+  const browsersDir = path.join(
+    __dirname,
+    '..',
+    'node_modules',
+    'playwright-core',
+    '.local-browsers'
+  )
+
+  if (!fs.existsSync(browsersDir)) return
+
+  const entries = fs.readdirSync(browsersDir, { withFileTypes: true })
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue
+    if (!/^ffmpeg-/i.test(ent.name)) continue
+    try {
+      fs.rmSync(path.join(browsersDir, ent.name), { recursive: true, force: true })
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function run() {
   const env = {
     ...process.env,
@@ -62,6 +85,7 @@ function run() {
 
   if (result.status === 0) {
     ensurePlaywrightOptionalDepStub()
+    removePlaywrightFfmpeg()
   }
 
   if (typeof result.status === 'number') process.exit(result.status)

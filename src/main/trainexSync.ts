@@ -10,6 +10,7 @@ type TrainexSyncArgs = {
   day: number
   timeoutMs?: number
   log?: SyncLogFn
+  status?: (text: string) => void
   profileDir?: string
   cacheDir?: string
 }
@@ -195,7 +196,7 @@ async function discoverIcsUrl(page: Page): Promise<string | null> {
 }
 
 export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSyncResult> {
-  const { username, password, month, year, day, log, profileDir, cacheDir } = args
+  const { username, password, month, year, day, log, status, profileDir, cacheDir } = args
   const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
   if (!username || !password) {
@@ -237,6 +238,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
 
     page.setDefaultTimeout(timeoutMs)
 
+    status?.('Login…')
     log?.('sync:navigate', { url: BASE_URL })
     const loginResp = await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
     log?.('sync:navigate-done', {
@@ -253,6 +255,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
     }
 
     log?.('sync:login-ok', { url: page.url() })
+    status?.('Einsatzplan öffnen…')
 
     const tryFetch = async (url: string): Promise<string | null> => {
       log?.('sync:fetch', { url })
@@ -322,6 +325,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       log?.('sync:tokens-from-url', { count: tokenCount })
 
       if (tokenCount > 0) {
+        status?.('Kalender laden…')
         const tokenizedMonth = buildTokenizedIcalUrl(tokens, { day: 0, month, year })
         const fetched = await tryFetch(tokenizedMonth)
         if (fetched) return { ok: true, icsBytesBase64: fetched }
@@ -335,6 +339,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       const icalUrl = html ? findAnyIcalUrlFromHtml(html) : null
       log?.('sync:discover-ical-from-page', { found: Boolean(icalUrl) })
       if (icalUrl) {
+        status?.('Kalender laden…')
         const resolved = applyDateParams(icalUrl, { day: 0, month, year })
         const fetched = await tryFetch(resolved)
         if (fetched) return { ok: true, icsBytesBase64: fetched }

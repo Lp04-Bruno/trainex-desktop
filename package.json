@@ -1,10 +1,10 @@
 {
   "name": "trainex-desktop",
-  "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "version": "0.1.0",
+  "description": "Desktop app to view TraiNex schedules from iCal/ICS",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Lp04-Bruno",
+  "homepage": "https://github.com/Lp04-Bruno/trainex-desktop",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
