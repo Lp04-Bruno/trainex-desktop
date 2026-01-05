@@ -77,7 +77,11 @@ function App(): React.ReactElement {
   const applyIcsContent = (content: string): void => {
     const parsed = parseIcsToEvents(content)
     setEvents(parsed)
-    setStatus(`Geladen: ${parsed.length} Termine`)
+    setStatus(
+      parsed.length === 0
+        ? 'Geladen: 0 Termine (ICS evtl. leer/inkompatibel – siehe Log/last-sync.ics)'
+        : `Geladen: ${parsed.length} Termine`
+    )
     setSelectedDayKey(parsed.length > 0 ? dayKeyFromIso(parsed[0].start) : null)
     console.log('Parsed events:', parsed)
   }

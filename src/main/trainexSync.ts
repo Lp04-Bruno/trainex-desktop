@@ -59,15 +59,9 @@ function hasUtf16VCalendar(buffer: Buffer): boolean {
 }
 
 function looksLikeIcs(body: Buffer, headers: Record<string, string>): boolean {
+  void headers
   if (isIcsBytes(body)) return true
   if (hasUtf16VCalendar(body)) return true
-
-  const ct = (headers['content-type'] ?? '').toLowerCase()
-  if (ct.includes('text/calendar')) return true
-
-  const cd = (headers['content-disposition'] ?? '').toLowerCase()
-  if (cd.includes('.ics')) return true
-
   return false
 }
 
@@ -108,6 +102,56 @@ function findIcsExportUrlFromHtml(html: string): string | null {
   const m = decoded.match(re)
   if (!m?.[1]) return null
   return normalizeUrl(m[1])
+}
+
+function findAnyIcalUrlFromHtml(html: string): string | null {
+  const decoded = decodeHtmlEntities(html)
+  const re = /einsatzplan_listenansicht_iCal\.cfm\?[^'"\s<>]*/gi
+  const matches = decoded.match(re)
+  if (!matches || matches.length === 0) return null
+
+  const preferred = matches.find(
+    (m) => /TokCF\d+=/i.test(m) || /IDphp\d+=/i.test(m) || /sec\d+=/i.test(m)
+  )
+  return normalizeUrl(preferred ?? matches[0])
+}
+
+function applyDateParams(
+  url: string,
+  args: Pick<TrainexSyncArgs, 'day' | 'month' | 'year'>
+): string {
+  const u = new URL(url)
+  u.searchParams.set('ics', '1')
+  u.searchParams.set('umonat', String(args.month))
+  u.searchParams.set('ujahr', String(args.year))
+  u.searchParams.set('utag', args.day > 0 ? String(args.day) : '')
+  return u.toString()
+}
+
+function extractSessionTokenParams(url: string): Record<string, string> {
+  const u = new URL(url)
+  const out: Record<string, string> = {}
+  for (const [k, v] of u.searchParams.entries()) {
+    if (/^TokCF\d+$/i.test(k) || /^IDphp\d+$/i.test(k) || /^sec/i.test(k)) {
+      out[k] = v
+    }
+  }
+  return out
+}
+
+function buildTokenizedIcalUrl(
+  tokens: Record<string, string>,
+  args: Pick<TrainexSyncArgs, 'day' | 'month' | 'year'>
+): string {
+  const u = new URL(`${BASE_URL}cfm/einsatzplan/einsatzplan_listenansicht_iCal.cfm`)
+  for (const [k, v] of Object.entries(tokens)) {
+    u.searchParams.set(k, v)
+  }
+  u.searchParams.set('ics', '1')
+  u.searchParams.set('umonat', String(args.month))
+  u.searchParams.set('ujahr', String(args.year))
+  u.searchParams.set('utag', args.day > 0 ? String(args.day) : '')
+  return u.toString()
 }
 
 async function fillLoginForm(page: Page, username: string, password: string): Promise<void> {
@@ -194,7 +238,12 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
     page.setDefaultTimeout(timeoutMs)
 
     log?.('sync:navigate', { url: BASE_URL })
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
+    const loginResp = await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
+    log?.('sync:navigate-done', {
+      requestedUrl: BASE_URL,
+      finalUrl: page.url(),
+      status: loginResp?.status() ?? null
+    })
     await fillLoginForm(page, username, password)
 
     await page.waitForLoadState('networkidle').catch(() => {})
@@ -207,9 +256,11 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
 
     const tryFetch = async (url: string): Promise<string | null> => {
       log?.('sync:fetch', { url })
+      const referer = page.url()
       const resp = await page.request.get(url, {
         headers: {
-          Accept: 'text/calendar, text/plain;q=0.9, */*;q=0.8'
+          Accept: 'text/calendar, text/plain;q=0.9, */*;q=0.8',
+          Referer: referer
         }
       })
       const status = resp.status()
@@ -228,6 +279,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
           url,
           status,
           finalUrl,
+          referer,
           bytes: body.length,
           contentType: headers['content-type'] ?? null,
           contentDisposition: headers['content-disposition'] ?? null,
@@ -247,6 +299,52 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       return body.toString('base64')
     }
 
+    const tokenBootstrapUrls = [
+      `${BASE_URL}cfm/einsatzplan/einsatzplan_listenansicht_kt.cfm`,
+      `${BASE_URL}cfm/einsatzplan/einsatzplan_stundenplan.cfm`,
+      `${BASE_URL}cfm/einsatzplan/`
+    ]
+
+    for (const bootstrapUrl of tokenBootstrapUrls) {
+      log?.('sync:navigate', { url: bootstrapUrl })
+      const r = await page.goto(bootstrapUrl, { waitUntil: 'domcontentloaded' }).catch(() => null)
+      await page.waitForLoadState('networkidle').catch(() => {})
+
+      const finalUrl = page.url()
+      log?.('sync:navigate-done', {
+        requestedUrl: bootstrapUrl,
+        finalUrl,
+        status: r?.status() ?? null
+      })
+
+      const tokens = extractSessionTokenParams(finalUrl)
+      const tokenCount = Object.keys(tokens).length
+      log?.('sync:tokens-from-url', { count: tokenCount })
+
+      if (tokenCount > 0) {
+        const tokenizedMonth = buildTokenizedIcalUrl(tokens, { day: 0, month, year })
+        const fetched = await tryFetch(tokenizedMonth)
+        if (fetched) return { ok: true, icsBytesBase64: fetched }
+
+        const tokenizedDay = buildTokenizedIcalUrl(tokens, { day, month, year })
+        const fetchedDay = await tryFetch(tokenizedDay)
+        if (fetchedDay) return { ok: true, icsBytesBase64: fetchedDay }
+      }
+
+      const html = await page.content().catch(() => '')
+      const icalUrl = html ? findAnyIcalUrlFromHtml(html) : null
+      log?.('sync:discover-ical-from-page', { found: Boolean(icalUrl) })
+      if (icalUrl) {
+        const resolved = applyDateParams(icalUrl, { day: 0, month, year })
+        const fetched = await tryFetch(resolved)
+        if (fetched) return { ok: true, icsBytesBase64: fetched }
+
+        const resolvedDay = applyDateParams(icalUrl, { day, month, year })
+        const fetchedDay = await tryFetch(resolvedDay)
+        if (fetchedDay) return { ok: true, icsBytesBase64: fetchedDay }
+      }
+    }
+
     const directMonth = await tryFetch(icsCandidateUrl({ day: 0, month, year }))
     if (directMonth) return { ok: true, icsBytesBase64: directMonth }
 
@@ -256,19 +354,32 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
     const indexUrl = einsatzplanIndexUrl()
     log?.('sync:navigate', { url: indexUrl })
     await page.goto(indexUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    await page.waitForLoadState('networkidle').catch(() => {})
 
-    const html = await page.content()
-    const discovered = findIcsExportUrlFromHtml(html)
-    log?.('sync:discover-link', { found: Boolean(discovered) })
-    if (discovered) {
-      const fetched = await tryFetch(discovered)
+    const htmlIndex = await page.content().catch(() => '')
+    const discoveredAny = htmlIndex ? findAnyIcalUrlFromHtml(htmlIndex) : null
+    log?.('sync:discover-ical-any-index', { found: Boolean(discoveredAny) })
+    if (discoveredAny) {
+      const resolved = applyDateParams(discoveredAny, { day: 0, month, year })
+      const fetched = await tryFetch(resolved)
+      if (fetched) return { ok: true, icsBytesBase64: fetched }
+
+      const resolvedDay = applyDateParams(discoveredAny, { day, month, year })
+      const fetchedDay = await tryFetch(resolvedDay)
+      if (fetchedDay) return { ok: true, icsBytesBase64: fetchedDay }
+    }
+
+    const discovered2 = htmlIndex ? findIcsExportUrlFromHtml(htmlIndex) : null
+    log?.('sync:discover-link-index', { found: Boolean(discovered2) })
+    if (discovered2) {
+      const fetched = await tryFetch(discovered2)
       if (fetched) return { ok: true, icsBytesBase64: fetched }
     }
 
-    const discoveredDom = await discoverIcsUrl(page)
-    log?.('sync:discover-dom', { found: Boolean(discoveredDom) })
-    if (discoveredDom) {
-      const fetched = await tryFetch(discoveredDom)
+    const discoveredDom2 = await discoverIcsUrl(page)
+    log?.('sync:discover-dom-index', { found: Boolean(discoveredDom2) })
+    if (discoveredDom2) {
+      const fetched = await tryFetch(discoveredDom2)
       if (fetched) return { ok: true, icsBytesBase64: fetched }
     }
 

@@ -139,6 +139,16 @@ ipcMain.handle(
 
     const buffer = Buffer.from(res.icsBytesBase64, 'base64')
     const decoded = decodeIcsText(buffer)
+
+    try {
+      const debugIcsPath = join(app.getPath('userData'), 'logs', 'last-sync.ics')
+      fs.mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true })
+      fs.writeFileSync(debugIcsPath, decoded, 'utf-8')
+      log('sync:wrote-debug-ics', { path: debugIcsPath, decodedChars: decoded.length })
+    } catch {
+      /* ignore */
+    }
+
     writeLastIcsCache(decoded)
     log('sync:ok', { bytes: buffer.length, decodedChars: decoded.length })
     return { ok: true as const, icsText: decoded }

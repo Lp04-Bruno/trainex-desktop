@@ -14,7 +14,7 @@ export function parseIcsToEvents(icsText: string): TrainexEvent[] {
 
   const events: TrainexEvent[] = []
   let inEvent = false
-  let current: Partial<TrainexEvent> & Record<string, unknown> = {}
+  let current: (Partial<TrainexEvent> & { duration?: string }) | null = null
 
   for (const rawLine of lines) {
     const line = rawLine.trim()
@@ -26,30 +26,31 @@ export function parseIcsToEvents(icsText: string): TrainexEvent[] {
       continue
     }
     if (line === 'END:VEVENT') {
-      if (inEvent) {
+      if (inEvent && current) {
         const summary = (current.summary ?? '').trim()
         const start = (current.start ?? '').trim()
         const end = (current.end ?? '').trim()
 
-        if (summary && start && end) {
-          const id = makeId(summary, start, end, current.location ?? '')
+        if (summary && start) {
+          const computedEnd = end || computeEndFromDuration(start, current.duration) || start
+          const id = makeId(summary, start, computedEnd, current.location ?? '')
           events.push({
             id,
             summary,
             start,
-            end,
-            location: current.location,
-            description: current.description,
+            end: computedEnd,
+            location: current.location?.trim() || undefined,
+            description: current.description?.trim() || undefined,
             categories: current.categories
           })
         }
       }
       inEvent = false
-      current = {}
+      current = null
       continue
     }
 
-    if (!inEvent) continue
+    if (!inEvent || !current) continue
 
     const { key, value } = splitIcsLine(line)
     if (!key) continue
@@ -76,6 +77,9 @@ export function parseIcsToEvents(icsText: string): TrainexEvent[] {
       case 'DTEND':
         current.end = icsDateToIso(value)
         break
+      case 'DURATION':
+        current.duration = value
+        break
       default:
         break
     }
@@ -83,6 +87,32 @@ export function parseIcsToEvents(icsText: string): TrainexEvent[] {
 
   events.sort((a, b) => a.start.localeCompare(b.start))
   return events
+}
+
+function computeEndFromDuration(startIso: string, duration: string | undefined): string | null {
+  if (!duration) return null
+  const ms = parseIcsDurationToMs(duration)
+  if (ms === null) return null
+  const start = new Date(startIso)
+  if (Number.isNaN(start.getTime())) return null
+  return new Date(start.getTime() + ms).toISOString()
+}
+
+function parseIcsDurationToMs(duration: string): number | null {
+  const d = duration.trim().toUpperCase()
+  if (!d.startsWith('P')) return null
+
+  const re = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/
+  const m = d.match(re)
+  if (!m) return null
+
+  const days = m[1] ? Number(m[1]) : 0
+  const hours = m[2] ? Number(m[2]) : 0
+  const minutes = m[3] ? Number(m[3]) : 0
+  const seconds = m[4] ? Number(m[4]) : 0
+
+  if ([days, hours, minutes, seconds].some((n) => Number.isNaN(n))) return null
+  return (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000
 }
 
 function unfoldIcsLines(input: string): string {
