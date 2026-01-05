@@ -15,6 +15,11 @@ type TrainexSyncResult =
   | { ok: false; error: string; hint?: string }
 
 const BASE_URL = 'https://trex.phwt.de/phwt-trainex/'
+const DEFAULT_TIMEOUT_MS = 45_000
+
+function icsCandidateUrl(args: Pick<TrainexSyncArgs, 'day' | 'month' | 'year'>): string {
+  return `${BASE_URL}cfm/einsatzplan/einsatzplan_listenansicht_iCal.cfm?ics=1&utag=${args.day}&umonat=${args.month}&ujahr=${args.year}`
+}
 
 function normalizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url)) return url
@@ -54,9 +59,14 @@ async function fillLoginForm(page: Page, username: string, password: string): Pr
   await submit.first().click()
 }
 
+function toBase64IcsOrNull(body: Buffer): string | null {
+  if (!/BEGIN:VCALENDAR/i.test(body.toString('ascii'))) return null
+  return body.toString('base64')
+}
+
 export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSyncResult> {
   const { username, password, month, year, day } = args
-  const timeoutMs = args.timeoutMs ?? 45_000
+  const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
   if (!username || !password) {
     return { ok: false, error: 'Bitte Login und Passwort eingeben.' }
@@ -71,8 +81,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
   if (!fs.existsSync(executablePath)) {
     return {
       ok: false,
-      error: 'Playwright-Browser (Chromium) ist nicht installiert.',
-      hint: 'Bitte einmal im Projektordner ausführen: npx playwright install chromium (oder npm install erneut laufen lassen).'
+      error: 'Interner Browser fehlt (Playwright Chromium).'
     }
   }
 
@@ -83,31 +92,20 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
 
     page.setDefaultTimeout(timeoutMs)
 
-    // 1) Login
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
     await fillLoginForm(page, username, password)
 
-    await page.waitForLoadState('networkidle').catch(() => {
-      /* ignore */
-    })
-
-    // 2) Try direct request to iCal endpoint
-    const candidateUrl = `${BASE_URL}cfm/einsatzplan/einsatzplan_listenansicht_iCal.cfm?ics=1&utag=${day}&umonat=${month}&ujahr=${year}`
+    await page.waitForLoadState('networkidle').catch(() => {})
 
     const tryFetch = async (url: string): Promise<string | null> => {
       const resp = await context.request.get(url)
       if (!resp.ok()) return null
-      const body = await resp.body()
-      const buffer = Buffer.from(body)
-
-      if (!/BEGIN:VCALENDAR/i.test(buffer.toString('ascii'))) return null
-      return buffer.toString('base64')
+      return toBase64IcsOrNull(Buffer.from(await resp.body()))
     }
 
-    const direct = await tryFetch(candidateUrl)
+    const direct = await tryFetch(icsCandidateUrl({ day, month, year }))
     if (direct) return { ok: true, icsBytesBase64: direct }
 
-    // 3) Fallback
     const html = await page.content()
     const discovered = findIcsExportUrlFromHtml(html)
     if (discovered) {
@@ -115,21 +113,9 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       if (fetched) return { ok: true, icsBytesBase64: fetched }
     }
 
-    // 4) Last fallback
-    const link = page.locator('a[href*="einsatzplan_listenansicht_iCal.cfm" i], a[href*="ics=1" i]')
-    if ((await link.count()) > 0) {
-      const href = await link.first().getAttribute('href')
-      if (href) {
-        const url = normalizeUrl(decodeHtmlEntities(href))
-        const fetched = await tryFetch(url)
-        if (fetched) return { ok: true, icsBytesBase64: fetched }
-      }
-    }
-
     return {
       ok: false,
-      error: 'Sync fehlgeschlagen: iCal/ICS Export-Link konnte nicht geladen werden.',
-      hint: 'Mögliche Ursachen: falsche Zugangsdaten, Captcha/2FA, oder TraiNex-Seite/Export-Link hat sich geändert.'
+      error: 'Sync fehlgeschlagen: iCal/ICS konnte nicht geladen werden.'
     }
   } catch (e) {
     return {
@@ -138,8 +124,6 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       hint: e instanceof Error ? e.message : String(e)
     }
   } finally {
-    await browser.close().catch(() => {
-      /* ignore */
-    })
+    await browser.close().catch(() => {})
   }
 }

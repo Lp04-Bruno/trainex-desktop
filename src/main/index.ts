@@ -4,6 +4,19 @@ import fs from 'fs'
 import iconv from 'iconv-lite'
 import { syncTrainexIcs } from './trainexSync'
 
+function configurePlaywrightBrowsersPath(): void {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return
+
+  if (app.isPackaged) {
+    process.env.PLAYWRIGHT_BROWSERS_PATH = join(process.resourcesPath, 'playwright-browsers')
+    return
+  }
+
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '0'
+}
+
+configurePlaywrightBrowsersPath()
+
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -15,7 +28,6 @@ function createWindow(): void {
     }
   })
 
-  // electron-vite: dev server URL oder gebaute index.html
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
