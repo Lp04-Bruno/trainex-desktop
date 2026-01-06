@@ -78,6 +78,7 @@ function App(): React.ReactElement {
   const today = React.useMemo(() => new Date(), [])
   const [syncUsername, setSyncUsername] = React.useState<string>('')
   const [syncPassword, setSyncPassword] = React.useState<string>('')
+  const [passwordEditMode, setPasswordEditMode] = React.useState<boolean>(false)
   const [syncDay, setSyncDay] = React.useState<number>(today.getDate())
   const [syncMonth, setSyncMonth] = React.useState<number>(today.getMonth() + 1)
   const [syncYear, setSyncYear] = React.useState<number>(today.getFullYear())
@@ -95,6 +96,8 @@ function App(): React.ReactElement {
     hasSavedPassword: boolean
     autoRefreshEnabled: boolean
   } | null>(null)
+
+  const [lastAutoUpdateAt, setLastAutoUpdateAt] = React.useState<Date | null>(null)
 
   const [toast, setToast] = React.useState<{
     kind: 'error' | 'success' | 'info'
@@ -164,7 +167,8 @@ function App(): React.ReactElement {
   const credentialsVerified = verifiedCredKey.length > 0 && verifiedCredKey === currentCredKey
 
   const passwordMask = '••••••••'
-  const passwordMaskedPlaceholder = hasSavedPassword && syncPassword.length === 0
+  const passwordMaskedPlaceholder =
+    hasSavedPassword && syncPassword.length === 0 && !passwordEditMode
   const passwordFieldValue = passwordMaskedPlaceholder ? passwordMask : syncPassword
 
   const getTodayParts = React.useCallback((): { day: number; month: number; year: number } => {
@@ -266,6 +270,7 @@ function App(): React.ReactElement {
       try {
         applyIcsContent(payload.icsText, 'auto')
         setStatus((prev) => `${prev} (Auto)`)
+        setLastAutoUpdateAt(new Date())
       } catch (e) {
         console.error(e)
         setStatus('Auto-Update: Fehler beim Parsen. Siehe Konsole.')
@@ -323,7 +328,17 @@ function App(): React.ReactElement {
       return
     }
 
-    const shouldUseSaved = syncPassword.length === 0 && hasSavedPassword
+    const usernameMatchesSaved =
+      loadedSettings !== null && syncUsername.trim() === (loadedSettings.username ?? '').trim()
+    const canUseSavedCredentials = hasSavedPassword && usernameMatchesSaved
+    const shouldUseSaved = syncPassword.length === 0 && canUseSavedCredentials
+
+    if (syncPassword.length === 0 && hasSavedPassword && !usernameMatchesSaved) {
+      setStatus('Login wurde geändert. Bitte speichern oder Passwort neu eingeben.')
+      showErrorToast('Login wurde geändert. Bitte speichern oder Passwort neu eingeben.')
+      return
+    }
+
     if (!shouldUseSaved && syncPassword.length === 0) {
       setStatus('Bitte Passwort eingeben.')
       showErrorToast('Bitte Passwort eingeben.')
@@ -465,6 +480,7 @@ function App(): React.ReactElement {
         autoRefreshEnabled: res.settings.autoRefreshEnabled
       })
       setSyncPassword('')
+      setPasswordEditMode(false)
       setStatus('Einstellungen gespeichert.')
       showSuccessToast('Einstellungen gespeichert.')
     } catch (e) {
@@ -474,6 +490,17 @@ function App(): React.ReactElement {
     }
   }
 
+  const discardChanges = React.useCallback((): void => {
+    if (!loadedSettings) return
+    setSyncUsername(loadedSettings.username)
+    setSavePassword(loadedSettings.hasSavedPassword)
+    setAutoRefreshEnabled(loadedSettings.autoRefreshEnabled)
+    setSyncPassword('')
+    setVerifiedCredKey('')
+    setPasswordEditMode(false)
+    showInfoToast('Änderungen verworfen.')
+  }, [loadedSettings, showInfoToast])
+
   const settingsDirty = React.useMemo(() => {
     if (!loadedSettings) return false
     if (syncUsername !== loadedSettings.username) return true
@@ -482,6 +509,15 @@ function App(): React.ReactElement {
     if (syncPassword.length > 0) return true
     return false
   }, [loadedSettings, syncUsername, savePassword, autoRefreshEnabled, syncPassword])
+
+  const savePasswordDisabledBecauseNotVerified = !hasSavedPassword && !credentialsVerified
+  const savePasswordCheckboxDisabled = !canEncrypt || savePasswordDisabledBecauseNotVerified
+  const usernameUnsavedChange = loadedSettings !== null && syncUsername !== loadedSettings.username
+
+  const lastAutoUpdateText = React.useMemo(() => {
+    if (!lastAutoUpdateAt) return ''
+    return lastAutoUpdateAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  }, [lastAutoUpdateAt])
 
   const exportJson = async (): Promise<void> => {
     if (events.length === 0) {
@@ -568,7 +604,13 @@ function App(): React.ReactElement {
           </button>
           <button
             className={activeView === 'settings' ? 'btn' : 'btn btn--ghost'}
-            onClick={() => setActiveView(activeView === 'settings' ? 'planner' : 'settings')}
+            onClick={() => {
+              if (activeView === 'settings' && settingsDirty) {
+                showInfoToast('Bitte erst speichern oder Änderungen verwerfen.')
+                return
+              }
+              setActiveView(activeView === 'settings' ? 'planner' : 'settings')
+            }}
           >
             {activeView === 'settings' ? 'Startseite' : 'Einstellungen'}
           </button>
@@ -598,6 +640,7 @@ function App(): React.ReactElement {
                     setSavePassword(false)
                     setAutoRefreshEnabled(false)
                     setVerifiedCredKey('')
+                    setPasswordEditMode(false)
                   }}
                   placeholder="TraiNex Login"
                   autoComplete="username"
@@ -606,9 +649,42 @@ function App(): React.ReactElement {
                   className="input"
                   type="password"
                   value={passwordFieldValue}
+                  onKeyDown={(e) => {
+                    if (!passwordMaskedPlaceholder) return
+
+                    if (e.key === 'Backspace' || e.key === 'Delete') {
+                      e.preventDefault()
+                      setPasswordEditMode(true)
+                      setSyncPassword('')
+                      setSavePassword(false)
+                      setAutoRefreshEnabled(false)
+                      setVerifiedCredKey('')
+                      return
+                    }
+
+                    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                      e.preventDefault()
+                      setPasswordEditMode(true)
+                      setSyncPassword(e.key)
+                      setSavePassword(false)
+                      setAutoRefreshEnabled(false)
+                      setVerifiedCredKey('')
+                    }
+                  }}
+                  onPaste={(e) => {
+                    if (!passwordMaskedPlaceholder) return
+                    e.preventDefault()
+                    const text = e.clipboardData.getData('text')
+                    setPasswordEditMode(true)
+                    setSyncPassword(text)
+                    setSavePassword(false)
+                    setAutoRefreshEnabled(false)
+                    setVerifiedCredKey('')
+                  }}
                   onChange={(e) => {
                     const nextValue = e.target.value
                     if (passwordMaskedPlaceholder) {
+                      setPasswordEditMode(true)
                       if (nextValue.startsWith(passwordMask)) {
                         setSyncPassword(nextValue.slice(passwordMask.length))
                       } else {
@@ -625,14 +701,22 @@ function App(): React.ReactElement {
                   autoComplete="current-password"
                 />
 
+                {hasSavedPassword && usernameUnsavedChange && syncPassword.length === 0 && (
+                  <div className="settings__hint settings__hint--warn">
+                    Du hast den Login geändert – bitte speichern oder Passwort neu eingeben.
+                  </div>
+                )}
+
                 <label className="settings__checkbox">
                   <input
                     type="checkbox"
                     checked={savePassword}
                     onChange={(e) => setSavePassword(e.target.checked)}
-                    disabled={!canEncrypt || (!hasSavedPassword && !credentialsVerified)}
+                    disabled={savePasswordCheckboxDisabled}
                   />
                   Login-Daten verschlüsselt speichern (inkl. Passwort)
+                  {savePasswordDisabledBecauseNotVerified &&
+                    ' (erst nach erfolgreichem Laden aktivierbar)'}
                 </label>
 
                 <label className="settings__checkbox">
@@ -644,6 +728,10 @@ function App(): React.ReactElement {
                   />
                   Automatisch aktualisieren (alle 2 Stunden, 06–20 Uhr)
                 </label>
+
+                {autoRefreshEnabled && lastAutoUpdateAt && (
+                  <div className="settings__hint">Letztes Auto-Update: {lastAutoUpdateText}</div>
+                )}
 
                 <button className="btn" onClick={syncNow} disabled={syncBusy}>
                   {syncBusy ? `Stundenplan wird geladen: ${status}` : 'Stundenplan laden'}
@@ -658,6 +746,13 @@ function App(): React.ReactElement {
                     disabled={syncBusy}
                   >
                     Einstellungen speichern
+                  </button>
+                  <button
+                    className="btn btn--ghost"
+                    onClick={discardChanges}
+                    disabled={syncBusy || !settingsDirty || loadedSettings === null}
+                  >
+                    Änderungen verwerfen
                   </button>
                 </div>
 
@@ -747,6 +842,17 @@ function App(): React.ReactElement {
                 </button>
               </div>
               <div className="settings__hint">Der Cache ist die zuletzt geladene ICS-Datei.</div>
+            </div>
+
+            <div className="settings__section">
+              <div className="settings__sectionTitle">Info</div>
+              <div className="settings__hint">
+                Kontakt: <b>l.preusker@stud.phwt.de</b>
+              </div>
+              <div className="settings__hint">© {new Date().getFullYear()}</div>
+              <div className="settings__hint">
+                Lizenz: <b>All Rights Reserved</b> (Details in <b>LICENSE</b>).
+              </div>
             </div>
           </section>
         </main>

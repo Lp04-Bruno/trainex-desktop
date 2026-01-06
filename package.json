@@ -3,6 +3,7 @@
   "version": "0.1.1",
   "description": "Desktop app to view TraiNex schedules from iCal/ICS",
   "main": "./out/main/index.js",
+  "license": "UNLICENSED",
   "author": "Lp04-Bruno",
   "homepage": "https://github.com/Lp04-Bruno/trainex-desktop",
   "scripts": {

@@ -135,6 +135,8 @@ code {
   color: var(--ev-c-text-1);
   font-size: 13px;
   line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
   transform: translateX(120%);
   opacity: 0;
   transition:
@@ -168,6 +170,11 @@ code {
 
 .settings__hint--dirty {
   font-weight: 600;
+}
+
+.settings__hint--warn {
+  font-weight: 600;
+  color: var(--ev-c-text-2);
 }
 
 .btn--ghost {
