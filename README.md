@@ -2,7 +2,7 @@
 
 TraiNex Desktop zeigt deinen Stundenplan als übersichtlichen Planer – direkt auf deinem PC.
 
-Version: 0.1.0 (siehe [CHANGELOG.md](CHANGELOG.md)).
+Version: 0.1.1 (siehe [CHANGELOG.md](CHANGELOG.md)).
 
 ## So benutzt du die App
 

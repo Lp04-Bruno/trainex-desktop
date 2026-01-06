@@ -21,6 +21,10 @@
   --ev-button-alt-hover-border: transparent;
   --ev-button-alt-hover-text: var(--ev-c-text-1);
   --ev-button-alt-hover-bg: var(--ev-c-gray-2);
+
+  --ev-tint-success: rgba(75, 224, 150, 0.767);
+  --ev-tint-error: rgba(231, 77, 100, 0.76);
+  --ev-tint-info: rgba(68, 129, 235, 0.733);
 }
 
 :root {

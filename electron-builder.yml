@@ -21,6 +21,7 @@ extraResources:
 win:
   executableName: trainex-desktop
   signAndEditExecutable: false
+  icon: resources/phwt_logo.png
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   compression: maximum
@@ -29,6 +30,7 @@ nsis:
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist
+  icon: resources/phwt_logo.png
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
@@ -42,6 +44,7 @@ linux:
     - AppImage
     - snap
     - deb
+  icon: resources/phwt_logo.png
   maintainer: electronjs.org
   category: Utility
 appImage:

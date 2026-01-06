@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
+import { createHash } from 'crypto'
 import iconv from 'iconv-lite'
 import { syncTrainexIcs } from './trainexSync'
 import { createSyncLogger } from './syncLogger'
@@ -41,6 +42,27 @@ let settings: AppSettings = { version: 1, username: '', autoRefreshEnabled: fals
 let autoRefreshTimer: NodeJS.Timeout | null = null
 let autoRefreshRunning = false
 let lastAutoRefreshAtMs = 0
+let lastVerifiedCredentialsHash: string | null = null
+
+function credentialsHash(username: string, password: string): string {
+  return createHash('sha256').update(`${username}\n${password}`, 'utf-8').digest('hex')
+}
+
+function resolveWindowIconPath(): string | undefined {
+  const candidates = [
+    join(process.cwd(), 'resources', 'phwt_logo.png'),
+    join(app.getAppPath(), 'resources', 'phwt_logo.png'),
+    join(process.resourcesPath, 'phwt_logo.png')
+  ]
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p
+    } catch {
+      /* ignore */
+    }
+  }
+  return undefined
+}
 
 function berlinNowParts(date: Date): { year: number; month: number; day: number; hour: number } {
   const parts = new Intl.DateTimeFormat('de-DE', {
@@ -194,6 +216,10 @@ async function runSyncWithCredentials(
   sendStatus(source === 'auto' ? 'Stundenplan automatisch aktualisiert.' : 'Sync abgeschlossen.')
   sendResult({ ok: true, source, icsText: decoded })
 
+  if (source === 'manual') {
+    lastVerifiedCredentialsHash = credentialsHash(args.username, args.password)
+  }
+
   if (source !== 'auto' && settings.autoRefreshEnabled && settings.encryptedPasswordBase64) {
     lastAutoRefreshAtMs = Date.now()
   }
@@ -202,9 +228,11 @@ async function runSyncWithCredentials(
 }
 
 function createWindow(): void {
+  const iconPath = resolveWindowIconPath()
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 700,
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js')
     }
@@ -349,8 +377,14 @@ ipcMain.handle(
       autoRefreshEnabled: boolean
     }
   ) => {
-    settings = setUsername(settings, args.username)
-    settings = setAutoRefreshEnabled(settings, args.autoRefreshEnabled)
+    const previous = settings
+    let next = setUsername(previous, args.username)
+
+    const usernameChanged = previous.username !== args.username
+    if (usernameChanged) {
+      next = clearSavedPassword(next)
+      next = setAutoRefreshEnabled(next, false)
+    }
 
     if (args.savePassword) {
       if (!canUseEncryption()) {
@@ -359,19 +393,32 @@ ipcMain.handle(
           error: 'Verschlüsselung ist auf diesem System nicht verfügbar.'
         }
       }
+
       if (args.password) {
-        settings = {
-          ...settings,
+        const providedHash = credentialsHash(args.username, args.password)
+        if (!lastVerifiedCredentialsHash || lastVerifiedCredentialsHash !== providedHash) {
+          return {
+            ok: false as const,
+            error:
+              'Bitte zuerst einmal erfolgreich synchronisieren, bevor du die Login-Daten speicherst.'
+          }
+        }
+
+        next = {
+          ...next,
           encryptedPasswordBase64: encryptAndStorePassword(args.password)
         }
-      } else if (!settings.encryptedPasswordBase64) {
+      } else if (!next.encryptedPasswordBase64) {
         return { ok: false as const, error: 'Bitte ein Passwort eingeben, um es zu speichern.' }
       }
+
+      next = setAutoRefreshEnabled(next, args.autoRefreshEnabled)
     } else {
-      settings = clearSavedPassword(settings)
-      settings = setAutoRefreshEnabled(settings, false)
+      next = clearSavedPassword(next)
+      next = setAutoRefreshEnabled(next, false)
     }
 
+    settings = next
     saveSettings(settings)
     startOrStopAutoRefresh()
     return { ok: true as const, settings: toPublicSettings(settings) }

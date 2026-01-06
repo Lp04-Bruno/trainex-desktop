@@ -105,6 +105,71 @@ code {
   cursor: not-allowed;
 }
 
+.btn--attention {
+  animation: btn-attention-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes btn-attention-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.toast {
+  position: fixed;
+  top: 70px;
+  right: 14px;
+  z-index: 9999;
+  width: 260px;
+  max-width: calc(100vw - 28px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ev-c-gray-3);
+  background-color: color-mix(in srgb, var(--color-background-soft) 92%, transparent);
+  color: var(--ev-c-text-1);
+  font-size: 13px;
+  line-height: 18px;
+  transform: translateX(120%);
+  opacity: 0;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
+}
+
+.toast--show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast--error {
+  border-color: color-mix(in srgb, var(--ev-tint-error) 70%, var(--ev-c-gray-3));
+  background-color: color-mix(in srgb, var(--ev-tint-error) 22%, var(--color-background-soft));
+}
+
+.toast--success {
+  border-color: color-mix(in srgb, var(--ev-tint-success) 70%, var(--ev-c-gray-3));
+  background-color: color-mix(
+    in srgb,
+    var(--ev-tint-success) 22%,
+    var(--color-background-soft)
+  );
+}
+
+.toast--info {
+  border-color: color-mix(in srgb, var(--ev-tint-info) 70%, var(--ev-c-gray-3));
+  background-color: color-mix(in srgb, var(--ev-tint-info) 18%, var(--color-background-soft));
+}
+
+.settings__hint--dirty {
+  font-weight: 600;
+}
+
 .btn--ghost {
   padding: 8px 10px;
   background-color: transparent;
