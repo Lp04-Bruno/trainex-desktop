@@ -375,6 +375,18 @@ code {
   color: var(--ev-c-text-1);
 }
 
+.agenda__titleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agenda__hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ev-c-text-2);
+}
+
 .agenda__nav {
   display: flex;
   gap: 8px;
@@ -403,6 +415,13 @@ code {
   color: var(--ev-c-text-1);
   font-size: 12px;
   line-height: 18px;
+  align-self: start;
+  display: inline-flex;
+  justify-content: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--ev-c-gray-3);
+  background-color: color-mix(in srgb, var(--color-background-mute) 80%, transparent);
 }
 
 .event-card__title {
@@ -411,10 +430,18 @@ code {
 }
 
 .event-card__location {
-  margin-top: 4px;
-  color: var(--ev-c-text-2);
-  font-size: 12px;
-  line-height: 16px;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--ev-c-gray-3);
+  background-color: color-mix(in srgb, var(--color-background-mute) 82%, transparent);
+  color: var(--ev-c-text-1);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 650;
 }
 
 .event-card__desc {

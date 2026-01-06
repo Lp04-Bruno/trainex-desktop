@@ -66,6 +66,48 @@ function formatTermineCount(count: number): string {
   return count === 1 ? '1 Termin' : `${count} Termine`
 }
 
+function parseTrainexSummary(summary: string): { subject: string; room: string | null } {
+  const parts = summary
+    .split(' - ')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .filter((p) => p.replace(/\s+/g, '').toLowerCase() !== 'phwt_trainex')
+
+  if (parts.length === 0) return { subject: summary.trim(), room: null }
+  const subject = parts[0] ?? summary.trim()
+  const room = parts.length >= 2 ? (parts[1] ?? null) : null
+  return { subject, room }
+}
+
+function extractProfessor(description: string | undefined): string | null {
+  if (!description) return null
+  const flat = description.replace(/\s+/g, ' ').trim()
+
+  const m = flat.match(/\/([^/]+?)\s+ab\s+\d{1,2}:\d{2}/i)
+  if (m?.[1]) return m[1].trim()
+
+  const beforeAb = flat.split(/\s+ab\s+\d{1,2}:\d{2}(?:\s+uhr)?/i)[0] ?? flat
+  const slashIdx = beforeAb.lastIndexOf('/')
+  if (slashIdx >= 0) {
+    const candidate = beforeAb.slice(slashIdx + 1).trim()
+    if (candidate && candidate.length <= 80) return candidate
+  }
+
+  return null
+}
+
+function hasTrainexCheckNote(description: string | undefined): boolean {
+  if (!description) return false
+  return /Aktuelle\s+Termine\s+immer\s+im\s+TraiNex\s+prüfen\.?/i.test(description)
+}
+
+function formatUpdatedAgo(sinceMs: number): string {
+  const diffMs = Math.max(0, Date.now() - sinceMs)
+  const mins = Math.floor(diffMs / 60_000)
+  if (mins <= 0) return 'vor <1 min'
+  return `vor ${mins} min`
+}
+
 function App(): React.ReactElement {
   const [events, setEvents] = React.useState<TrainexEvent[]>([])
   const [status, setStatus] = React.useState<string>('Noch keine Datei geladen.')
@@ -89,6 +131,7 @@ function App(): React.ReactElement {
   const [hasSavedPassword, setHasSavedPassword] = React.useState<boolean>(false)
   const [lastReloadSuccessMs, setLastReloadSuccessMs] = React.useState<number>(0)
   const [cooldownTick, setCooldownTick] = React.useState<number>(0)
+  const [statusTimeTick, setStatusTimeTick] = React.useState<number>(0)
   const syncBusyRef = React.useRef<boolean>(false)
   const [verifiedCredKey, setVerifiedCredKey] = React.useState<string>('')
   const [loadedSettings, setLoadedSettings] = React.useState<{
@@ -116,6 +159,16 @@ function App(): React.ReactElement {
       }
       setCooldownTick((x) => x + 1)
     }, 1_000)
+    return () => {
+      window.clearInterval(id)
+    }
+  }, [lastReloadSuccessMs])
+
+  React.useEffect(() => {
+    if (lastReloadSuccessMs === 0) return
+    const id = window.setInterval(() => {
+      setStatusTimeTick((x) => x + 1)
+    }, 60_000)
     return () => {
       window.clearInterval(id)
     }
@@ -414,7 +467,6 @@ function App(): React.ReactElement {
       }
 
       applyIcsContent(res.icsText, 'reload')
-      setStatus((prev) => `${prev} (Aktualisiert)`)
       setLastReloadSuccessMs(now)
       showSuccessToast('Stundenplan aktualisiert. Du kannst ihn jetzt in der Startseite ansehen.')
     } catch (e) {
@@ -432,6 +484,14 @@ function App(): React.ReactElement {
   const reloadCoolingDown = reloadRemainingMs > 0
   const reloadRemainingMin = reloadCoolingDown ? Math.ceil(reloadRemainingMs / 60_000) : 0
   void cooldownTick
+
+  const statusDisplay = React.useMemo(() => {
+    void statusTimeTick
+    if (lastLoadSource === 'reload' && lastReloadSuccessMs > 0 && status.startsWith('Geladen:')) {
+      return `${status} (${formatUpdatedAgo(lastReloadSuccessMs)} aktualisiert)`
+    }
+    return status
+  }, [lastLoadSource, lastReloadSuccessMs, status, statusTimeTick])
 
   const saveSettings = async (): Promise<void> => {
     const wantsPassword = savePassword
@@ -577,6 +637,11 @@ function App(): React.ReactElement {
     setSelectedDayKey(key)
   }
 
+  const showTraiNexNote = React.useMemo(() => {
+    if (!selectedBucket) return false
+    return selectedBucket.events.some((ev) => hasTrainexCheckNote(ev.description))
+  }, [selectedBucket])
+
   return (
     <div className="app-shell">
       {toast && (
@@ -592,14 +657,14 @@ function App(): React.ReactElement {
       <header className="topbar">
         <div className="topbar__title">
           <div className="topbar__h1">TraiNex Desktop</div>
-          <div className="topbar__sub">Dein Stundenplan aus TraiNex – offline als Planer</div>
+          <div className="topbar__sub">Dein Stundenplan aus TraiNex</div>
         </div>
 
         <div className="topbar__actions">
-          <button className="btn btn--ghost" onClick={openFile}>
+          <button className="btn btn--ghost" onClick={openFile} disabled={syncBusy}>
             ICS importieren
           </button>
-          <button className="btn btn--ghost" onClick={loadLast}>
+          <button className="btn btn--ghost" onClick={loadLast} disabled={syncBusy}>
             Letzte laden
           </button>
           <button
@@ -614,8 +679,8 @@ function App(): React.ReactElement {
           >
             {activeView === 'settings' ? 'Startseite' : 'Einstellungen'}
           </button>
-          <div className="status" title={status}>
-            {status}
+          <div className="status" title={statusDisplay}>
+            {statusDisplay}
           </div>
         </div>
       </header>
@@ -919,8 +984,13 @@ function App(): React.ReactElement {
 
           <section className="agenda">
             <div className="agenda__header">
-              <div className="agenda__title">
-                {selectedBucket ? formatDayLabel(selectedBucket.date) : 'Agenda'}
+              <div className="agenda__titleWrap">
+                <div className="agenda__title">
+                  {selectedBucket ? formatDayLabel(selectedBucket.date) : 'Agenda'}
+                </div>
+                {showTraiNexNote && (
+                  <div className="agenda__hint">Aktuelle Termine immer in TraiNex prüfen.</div>
+                )}
               </div>
 
               <div className="agenda__nav">
@@ -949,9 +1019,19 @@ function App(): React.ReactElement {
                       {formatTime(ev.start)}–{formatTime(ev.end)}
                     </div>
                     <div className="event-card__body">
-                      <div className="event-card__title">{ev.summary}</div>
-                      {ev.location && <div className="event-card__location">{ev.location}</div>}
-                      {ev.description && <div className="event-card__desc">{ev.description}</div>}
+                      {(() => {
+                        const parsed = parseTrainexSummary(ev.summary)
+                        const prof = extractProfessor(ev.description)
+                        const title = prof ? `${parsed.subject} — ${prof}` : parsed.subject
+                        return (
+                          <>
+                            <div className="event-card__title">{title}</div>
+                            {parsed.room && (
+                              <div className="event-card__location">{parsed.room}</div>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                 ))}
