@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: trainex-desktop
+appId: com.lpreusker.trainexdesktop
+productName: TraiNex Desktop
 directories:
   buildResources: build
 files:
@@ -19,15 +19,23 @@ extraResources:
   - from: node_modules/playwright-core/.local-browsers
     to: playwright-browsers
 win:
-  executableName: trainex-desktop
+  executableName: TraiNexDesktop
   signAndEditExecutable: false
   icon: resources/phwt_logo.png
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: TraiNex-Desktop-${version}-Setup.${ext}
   compression: maximum
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  oneClick: false
+  multiUser: true
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  license: build/license.txt
+  runAfterFinish: true
+  installerIcon: resources/phwt_logo.ico
+  uninstallerIcon: resources/phwt_logo.ico
+  createDesktopShortcut: onDemand
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   icon: resources/phwt_logo.png
@@ -45,7 +53,7 @@ linux:
     - snap
     - deb
   icon: resources/phwt_logo.png
-  maintainer: electronjs.org
+  maintainer: L. Preusker
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

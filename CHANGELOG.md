@@ -46,3 +46,21 @@ All notable changes to this project will be documented in this file.
 ### Docs
 
 - Updated `PRIVACY.md` and `SECURITY.md` to reflect current behavior and contact information
+
+## [0.1.2] - 2026-01-06
+
+### Added
+
+- Source-available "All Rights Reserved" license and in-app license info block
+
+### Changed
+
+- Consistent app branding as "TraiNex Desktop" (window title, installer metadata)
+- Windows installer now uses an NSIS wizard and allows choosing the installation directory
+- Windows installer improvements: custom setup filename, license acceptance page, optional desktop shortcut, and per-user vs. all-users install option
+- Agenda cards: clearer title layout and more prominent room display
+- Status text after reload shows "vor X min aktualisiert"
+
+### Fixed
+
+- Prevented topbar actions ("ICS importieren" / "Letzte laden") during server sync

@@ -468,7 +468,7 @@ function App(): React.ReactElement {
 
       applyIcsContent(res.icsText, 'reload')
       setLastReloadSuccessMs(now)
-      showSuccessToast('Stundenplan aktualisiert. Du kannst ihn jetzt in der Startseite ansehen.')
+      showSuccessToast('Stundenplan erfolgreich aktualisiert.')
     } catch (e) {
       console.error(e)
       setStatus('Aktualisierung fehlgeschlagen. Siehe Konsole.')

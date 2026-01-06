@@ -27,12 +27,12 @@ redistribute the Software outside of that purpose.
 Restrictions
 Unless you have prior written permission from the copyright holder, you may NOT:
 1) Redistribute the Software (including binaries, installers, or source), whether
-	modified or unmodified.
+   modified or unmodified.
 2) Publish, sell, sublicense, or otherwise commercialize the Software.
 3) Provide the Software as a service to third parties.
 
 No trademark rights
-This license does not grant any rights to use the project name, or other
+This license does not grant any rights to use the project name, logos, or other
 trademarks, except as necessary to refer to the Software.
 
 Disclaimer
