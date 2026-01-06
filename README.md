@@ -2,7 +2,7 @@
 
 TraiNex Desktop zeigt deinen Stundenplan als übersichtlichen Planer – direkt auf deinem PC.
 
-Version: 0.1.2 (siehe [CHANGELOG.md](CHANGELOG.md)).
+Version: 0.1.3 (siehe [CHANGELOG.md](CHANGELOG.md)).
 
 ## So benutzt du die App
 
@@ -47,8 +47,7 @@ npm run lint
 npm run typecheck
 ```
 
-Build:
+### Build
 
-```bash
-npm run build:win
-```
+- `npm run build:win` erstellt den normalen Installer (inkl. gebündeltem Playwright Chromium). Das ist größer, funktioniert aber ohne zusätzlich installierten Browser.
+- `npm run build:win:edge` erstellt einen kleineren Windows-Installer ohne gebündeltes Chromium. Diese Variante nutzt Microsoft Edge über Playwright (`msedge`) und setzt Edge voraus.

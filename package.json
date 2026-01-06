@@ -1,6 +1,6 @@
 {
   "name": "trainex-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Desktop app to view TraiNex schedules from iCal/ICS",
   "main": "./out/main/index.js",
   "license": "UNLICENSED",
@@ -18,6 +18,7 @@
     "postinstall": "electron-builder install-app-deps && node scripts/install-playwright-browsers.cjs",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
+    "build:win:edge": "npm run build && electron-builder --win -c electron-builder.edge.yml",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux"
   },

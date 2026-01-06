@@ -64,3 +64,14 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Prevented topbar actions ("ICS importieren" / "Letzte laden") during server sync
+
+## [0.1.3] - 2026-01-06
+
+### Added
+
+- Optional smaller Windows installer variant that uses Microsoft Edge (Playwright `msedge`) instead of bundling Playwright Chromium
+- New script: `npm run build:win:edge` (builds the Edge-only installer)
+
+### Changed
+
+- Packaged app now uses bundled Playwright browsers only if `resources/playwright-browsers` exists; otherwise Playwright falls back to system browsers

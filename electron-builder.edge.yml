@@ -1,0 +1,68 @@
+appId: com.lpreusker.trainexdesktop
+productName: TraiNex Desktop
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!dist/**'
+  - '!**/node_modules/playwright-core/.local-browsers/**'
+  - '!**/node_modules/playwright/.local-browsers/**'
+asarUnpack:
+  - resources/**
+
+# Edge-only Windows build: do NOT bundle Playwright Chromium browsers.
+
+win:
+  executableName: TraiNexDesktop
+  signAndEditExecutable: false
+  icon: resources/phwt_logo.png
+
+nsis:
+  artifactName: TraiNex-Desktop-${version}-Setup-Requires-Edge.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  license: build/license.txt
+  runAfterFinish: true
+  installerIcon: resources/phwt_logo.ico
+  uninstallerIcon: resources/phwt_logo.ico
+  createDesktopShortcut: true
+
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  icon: resources/phwt_logo.png
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+
+dmg:
+  artifactName: ${name}-${version}.${ext}
+
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  icon: resources/phwt_logo.png
+  maintainer: L. Preusker
+  category: Utility
+
+appImage:
+  artifactName: ${name}-${version}.${ext}
+
+npmRebuild: false
+
+publish:
+  provider: generic
+  url: https://example.com/auto-updates

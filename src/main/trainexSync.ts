@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, Page } from 'playwright'
+import type { BrowserContext, Page } from 'playwright'
 import fs from 'fs'
 import type { SyncLogFn } from './syncLogger'
 
@@ -208,30 +208,37 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
 
   const { chromium } = await import('playwright')
 
-  const executablePath = chromium.executablePath()
-  if (!fs.existsSync(executablePath)) {
-    log?.('sync:missing-browser', { executablePath })
-    return {
-      ok: false,
-      error: 'Interner Browser fehlt (Playwright Chromium).'
-    }
-  }
-
-  let browser: Browser | null = null
   let context: BrowserContext | null = null
 
-  try {
+  const launchArgs = cacheDir ? [`--disk-cache-dir=${cacheDir}`] : []
+
+  const tryLaunch = async (opts?: { channel?: string }): Promise<BrowserContext> => {
     if (profileDir) {
-      context = await chromium.launchPersistentContext(profileDir, {
+      return await chromium.launchPersistentContext(profileDir, {
         headless: true,
-        args: cacheDir ? [`--disk-cache-dir=${cacheDir}`] : []
+        args: launchArgs,
+        ...(opts?.channel ? { channel: opts.channel } : {})
       })
+    }
+
+    const b = await chromium.launch({
+      headless: true,
+      args: launchArgs,
+      ...(opts?.channel ? { channel: opts.channel } : {})
+    })
+    return await b.newContext()
+  }
+
+  try {
+    const executablePath = chromium.executablePath()
+    if (fs.existsSync(executablePath)) {
+      context = await tryLaunch()
+    } else if (process.platform === 'win32') {
+      log?.('sync:missing-browser', { executablePath, fallback: 'msedge' })
+      context = await tryLaunch({ channel: 'msedge' })
     } else {
-      browser = await chromium.launch({
-        headless: true,
-        args: cacheDir ? [`--disk-cache-dir=${cacheDir}`] : []
-      })
-      context = await browser.newContext()
+      log?.('sync:missing-browser', { executablePath })
+      return { ok: false, error: 'Interner Browser fehlt (Playwright Chromium).' }
     }
 
     const page = await context.newPage()
@@ -399,7 +406,8 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
       hint: e instanceof Error ? e.message : String(e)
     }
   } finally {
+    const b = context?.browser() ?? null
     await context?.close().catch(() => {})
-    await browser?.close().catch(() => {})
+    await b?.close().catch(() => {})
   }
 }

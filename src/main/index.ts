@@ -27,8 +27,11 @@ function configurePlaywrightBrowsersPath(): void {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH) return
 
   if (app.isPackaged) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = join(process.resourcesPath, 'playwright-browsers')
-    return
+    const bundled = join(process.resourcesPath, 'playwright-browsers')
+    if (fs.existsSync(bundled)) {
+      process.env.PLAYWRIGHT_BROWSERS_PATH = bundled
+      return
+    }
   }
 
   process.env.PLAYWRIGHT_BROWSERS_PATH = '0'
