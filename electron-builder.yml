@@ -24,18 +24,17 @@ win:
   icon: resources/phwt_logo.png
 nsis:
   artifactName: TraiNex-Desktop-${version}-Setup.${ext}
-  compression: maximum
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   oneClick: false
-  multiUser: true
+  perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
   license: build/license.txt
   runAfterFinish: true
   installerIcon: resources/phwt_logo.ico
   uninstallerIcon: resources/phwt_logo.ico
-  createDesktopShortcut: onDemand
+  createDesktopShortcut: true
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   icon: resources/phwt_logo.png
