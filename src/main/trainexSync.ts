@@ -255,7 +255,7 @@ export async function syncTrainexIcs(args: TrainexSyncArgs): Promise<TrainexSync
     }
 
     log?.('sync:login-ok', { url: page.url() })
-    status?.('Einsatzplan öffnen…')
+    status?.('Stundenplan laden…')
 
     const tryFetch = async (url: string): Promise<string | null> => {
       log?.('sync:fetch', { url })

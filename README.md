@@ -1,92 +1,54 @@
 # TraiNex Desktop
 
-Desktop app (Windows first) to view TraiNex schedules from iCal/ICS — without any server and without central data storage.
+TraiNex Desktop zeigt deinen Stundenplan als übersichtlichen Planer – direkt auf deinem PC.
 
-Current version: 0.1.0 (see [CHANGELOG.md](CHANGELOG.md)).
+Version: 0.1.0 (siehe [CHANGELOG.md](CHANGELOG.md)).
 
-## What it does
+## So benutzt du die App
 
-- Open a local `.ics` file (TraiNex export)
-- Display a planner-like agenda
-- Optional Auto-Sync: log in to TraiNex and download the iCal/ICS automatically
-- Export loaded events as JSON/CSV
+1. App starten
+2. Oben auf **Einstellungen** gehen
+3. TraiNex‑Login + Passwort eingeben
+4. **Stundenplan laden** klicken
+5. Links einen Tag auswählen oder mit ←/→ wechseln
 
-## How to use
+### Wenn du schon eine ICS-Datei hast
 
-1. Start the app
-2. Click **ICS auswählen** and choose your TraiNex `.ics` export
-3. Use the left sidebar to pick a day, or navigate with ←/→
-4. Optional: **Letzte laden** uses the local cache; **Cache löschen** clears it
+Du kannst auch eine Datei importieren:
 
-### Auto-Sync
+- Oben auf **ICS importieren** klicken und deine `.ics` auswählen
 
-- Enter your TraiNex login and password and click **Sync starten**.
-- The status text shows progress (Login → Einsatzplan → Kalender laden).
+### Export & Cache
 
-Sync logs are written to your userData folder:
+In **Einstellungen** findest du:
 
-- `trainex-sync.log` (diagnostics)
-- `last-sync.ics` (last downloaded content; useful for debugging)
+- **Export JSON** / **Export CSV** (exportiert die aktuell geladenen Termine)
+- **Cache löschen** (löscht die zuletzt geladene Datei)
 
-## Privacy
+## Datenschutz
 
-- No server, no central database.
-- Each user uses their own TraiNex login.
-- Credentials should not be stored by default (only in RAM during sync).
+- Die App nutzt dein TraiNex‑Konto nur zum Laden des Stundenplans.
+- Das Passwort wird nicht gespeichert.
+- Es gibt keinen Server der App – alles läuft lokal.
 
-Details: see [PRIVACY.md](PRIVACY.md).
+Details: [PRIVACY.md](PRIVACY.md)
 
-## Development
-
-### Requirements
-
-- Node.js (LTS recommended)
-
-### Install
+## Entwicklung
 
 ```bash
 npm install
-```
-
-### Run
-
-```bash
 npm run dev
 ```
 
-### Quality checks
+Qualität:
 
 ```bash
 npm run lint
 npm run typecheck
 ```
 
-### Build
+Build:
 
 ```bash
-# Windows
 npm run build:win
-
-# macOS
-npm run build:mac
-
-# Linux
-npm run build:linux
 ```
-
-## Release
-
-- Versioning and release notes: see [CHANGELOG.md](CHANGELOG.md).
-- Auto-Sync uses a bundled Chromium (Playwright) so end users do not need to install a browser.
-
-## Contributing
-
-Developer setup and scripts: see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Security
-
-See [SECURITY.md](SECURITY.md).
-
-## License
-
-MIT — see [LICENSE](LICENSE).

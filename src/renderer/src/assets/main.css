@@ -122,6 +122,75 @@ code {
   overflow: hidden;
 }
 
+.settings {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.settings__panel {
+  max-width: 760px;
+  margin: 0 auto;
+  border: 1px solid var(--ev-c-gray-3);
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--color-background-soft) 85%, transparent);
+  padding: 16px;
+}
+
+.settings__title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ev-c-text-1);
+}
+
+.settings__subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ev-c-text-2);
+}
+
+.settings__section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ev-c-gray-3);
+}
+
+.settings__sectionTitle {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ev-c-text-2);
+  margin-bottom: 10px;
+}
+
+.settings__grid {
+  display: grid;
+  gap: 10px;
+}
+
+.settings__row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings__hint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ev-c-text-2);
+}
+
+.settings__checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ev-c-text-1);
+}
+
 .sidebar {
   border-right: 1px solid var(--ev-c-gray-3);
   background-color: color-mix(in srgb, var(--color-background) 78%, transparent);
