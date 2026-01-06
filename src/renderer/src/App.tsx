@@ -74,16 +74,52 @@ function App(): React.ReactElement {
   const [syncMonth, setSyncMonth] = React.useState<number>(today.getMonth() + 1)
   const [syncYear, setSyncYear] = React.useState<number>(today.getFullYear())
   const [syncBusy, setSyncBusy] = React.useState<boolean>(false)
-  const [rememberUsername, setRememberUsername] = React.useState<boolean>(true)
+  const [savePassword, setSavePassword] = React.useState<boolean>(false)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState<boolean>(false)
+  const [canEncrypt, setCanEncrypt] = React.useState<boolean>(false)
+  const [hasSavedPassword, setHasSavedPassword] = React.useState<boolean>(false)
   const syncBusyRef = React.useRef<boolean>(false)
 
+  const applyIcsContent = React.useCallback((content: string): void => {
+    const parsed = parseIcsToEvents(content)
+    setEvents(parsed)
+    setStatus(
+      parsed.length === 0
+        ? 'Geladen: 0 Termine (ICS evtl. leer/inkompatibel – siehe Log/last-sync.ics)'
+        : `Geladen: ${parsed.length} Termine`
+    )
+    setSelectedDayKey(parsed.length > 0 ? dayKeyFromIso(parsed[0].start) : null)
+    console.log('Parsed events:', parsed)
+  }, [])
+
   React.useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem('trainex.sync.username')
-      if (saved) setSyncUsername(saved)
-    } catch {
-      /* ignore */
+    let didSet = false
+
+    const init = async (): Promise<void> => {
+      try {
+        const s = await window.api.getSettings()
+        setCanEncrypt(s.canEncrypt)
+        setAutoRefreshEnabled(s.autoRefreshEnabled)
+        setHasSavedPassword(s.hasSavedPassword)
+        setSavePassword(s.hasSavedPassword)
+        if (s.username) {
+          setSyncUsername(s.username)
+          didSet = true
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (didSet) return
+      try {
+        const saved = window.localStorage.getItem('trainex.sync.username')
+        if (saved) setSyncUsername(saved)
+      } catch {
+        /* ignore */
+      }
     }
+
+    void init()
   }, [])
 
   React.useEffect(() => {
@@ -100,17 +136,23 @@ function App(): React.ReactElement {
     }
   }, [])
 
-  const applyIcsContent = (content: string): void => {
-    const parsed = parseIcsToEvents(content)
-    setEvents(parsed)
-    setStatus(
-      parsed.length === 0
-        ? 'Geladen: 0 Termine (ICS evtl. leer/inkompatibel – siehe Log/last-sync.ics)'
-        : `Geladen: ${parsed.length} Termine`
-    )
-    setSelectedDayKey(parsed.length > 0 ? dayKeyFromIso(parsed[0].start) : null)
-    console.log('Parsed events:', parsed)
-  }
+  React.useEffect(() => {
+    const unsub = window.api.onSyncResult((payload) => {
+      if (!payload.ok) return
+      if (payload.source !== 'auto') return
+      try {
+        applyIcsContent(payload.icsText)
+        setStatus((prev) => `${prev} (Auto)`)
+      } catch (e) {
+        console.error(e)
+        setStatus('Auto-Update: Fehler beim Parsen. Siehe Konsole.')
+      }
+    })
+
+    return () => {
+      unsub()
+    }
+  }, [applyIcsContent])
 
   const openFile = async (): Promise<void> => {
     const content = await window.api.openIcsFile()
@@ -155,12 +197,10 @@ function App(): React.ReactElement {
       return
     }
 
-    if (rememberUsername) {
-      try {
-        window.localStorage.setItem('trainex.sync.username', syncUsername)
-      } catch {
-        /* ignore */
-      }
+    try {
+      window.localStorage.setItem('trainex.sync.username', syncUsername)
+    } catch {
+      /* ignore */
     }
 
     setSyncBusy(true)
@@ -186,6 +226,67 @@ function App(): React.ReactElement {
       setStatus('Sync fehlgeschlagen. Siehe Konsole.')
     } finally {
       setSyncBusy(false)
+    }
+  }
+
+  const syncSavedNow = async (): Promise<void> => {
+    setSyncBusy(true)
+    setStatus('Stundenplan wird geladen…')
+    try {
+      const res = await window.api.syncTrainexIcsSaved({
+        day: syncDay,
+        month: syncMonth,
+        year: syncYear
+      })
+
+      if (!res.ok) {
+        setStatus(res.hint ? `${res.error} (${res.hint})` : res.error)
+        return
+      }
+
+      applyIcsContent(res.icsText)
+      setStatus((prev) => `${prev} (Reload)`)
+    } catch (e) {
+      console.error(e)
+      setStatus('Reload fehlgeschlagen. Siehe Konsole.')
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
+  const saveSettings = async (): Promise<void> => {
+    const wantsPassword = savePassword
+    const autoEnabled = autoRefreshEnabled
+
+    if (wantsPassword && !canEncrypt) {
+      setStatus('Verschlüsselung ist auf diesem System nicht verfügbar.')
+      return
+    }
+
+    const passwordToSave = syncPassword ? syncPassword : undefined
+
+    setStatus('Einstellungen werden gespeichert…')
+    try {
+      const res = await window.api.setSettings({
+        username: syncUsername,
+        savePassword: wantsPassword,
+        password: passwordToSave,
+        autoRefreshEnabled: autoEnabled
+      })
+
+      if (!res.ok) {
+        setStatus(res.error)
+        return
+      }
+
+      setCanEncrypt(res.settings.canEncrypt)
+      setHasSavedPassword(res.settings.hasSavedPassword)
+      setSavePassword(res.settings.hasSavedPassword)
+      setAutoRefreshEnabled(res.settings.autoRefreshEnabled)
+      setStatus('Einstellungen gespeichert.')
+    } catch (e) {
+      console.error(e)
+      setStatus('Einstellungen konnten nicht gespeichert werden.')
     }
   }
 
@@ -335,16 +436,46 @@ function App(): React.ReactElement {
                 <label className="settings__checkbox">
                   <input
                     type="checkbox"
-                    checked={rememberUsername}
-                    onChange={(e) => setRememberUsername(e.target.checked)}
+                    checked={savePassword}
+                    onChange={(e) => setSavePassword(e.target.checked)}
+                    disabled={!canEncrypt}
                   />
-                  Login merken (nur Benutzername)
+                  Login-Daten verschlüsselt speichern (inkl. Passwort)
+                </label>
+
+                <label className="settings__checkbox">
+                  <input
+                    type="checkbox"
+                    checked={autoRefreshEnabled}
+                    onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
+                    disabled={!savePassword && !hasSavedPassword}
+                  />
+                  Automatisch aktualisieren (alle 2 Stunden, 06–20 Uhr)
                 </label>
 
                 <button className="btn" onClick={syncNow} disabled={syncBusy}>
                   {syncBusy ? 'Stundenplan wird geladen…' : 'Stundenplan laden'}
                 </button>
-                <div className="sync__hint">Passwort wird nicht gespeichert.</div>
+                <div className="sync__hint">
+                  Passwort wird nicht gespeichert – außer du aktivierst verschlüsseltes Speichern.
+                </div>
+
+                <div className="settings__row">
+                  <button className="btn btn--ghost" onClick={saveSettings} disabled={syncBusy}>
+                    Einstellungen speichern
+                  </button>
+                </div>
+
+                {!canEncrypt && (
+                  <div className="settings__hint">
+                    Verschlüsseltes Speichern ist auf diesem System nicht verfügbar.
+                  </div>
+                )}
+                {hasSavedPassword && (
+                  <div className="settings__hint">
+                    Ein Passwort ist bereits gespeichert. Du musst es nicht erneut eingeben.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -388,6 +519,11 @@ function App(): React.ReactElement {
               <div className="sync__hint">
                 Tipp: Öffne <b>Einstellungen</b> und lade deinen Stundenplan direkt aus TraiNex.
               </div>
+              {hasSavedPassword && (
+                <button className="btn" onClick={syncSavedNow} disabled={syncBusy}>
+                  {syncBusy ? 'Reload…' : 'Stundenplan neu laden'}
+                </button>
+              )}
               <button className="btn" onClick={() => setActiveView('settings')}>
                 Zu den Einstellungen
               </button>

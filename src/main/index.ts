@@ -4,6 +4,18 @@ import fs from 'fs'
 import iconv from 'iconv-lite'
 import { syncTrainexIcs } from './trainexSync'
 import { createSyncLogger } from './syncLogger'
+import {
+  loadSettings,
+  saveSettings,
+  toPublicSettings,
+  canUseEncryption,
+  encryptAndStorePassword,
+  decryptStoredPassword,
+  clearSavedPassword,
+  setAutoRefreshEnabled,
+  setUsername,
+  type AppSettings
+} from './appSettings'
 
 const chromiumCacheDir = join(app.getPath('userData'), 'chromium-cache')
 fs.mkdirSync(chromiumCacheDir, { recursive: true })
@@ -25,6 +37,170 @@ configurePlaywrightBrowsersPath()
 
 let mainWindow: BrowserWindow | null = null
 
+let settings: AppSettings = { version: 1, username: '', autoRefreshEnabled: false }
+let autoRefreshTimer: NodeJS.Timeout | null = null
+let autoRefreshRunning = false
+let lastAutoRefreshAtMs = 0
+
+function berlinNowParts(date: Date): { year: number; month: number; day: number; hour: number } {
+  const parts = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  }).formatToParts(date)
+
+  const get = (type: string): number => {
+    const p = parts.find((x) => x.type === type)?.value ?? '0'
+    return Number(p)
+  }
+
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour')
+  }
+}
+
+function inBerlinAutoWindow(date: Date): boolean {
+  const { hour } = berlinNowParts(date)
+  return hour >= 6 && hour <= 20
+}
+
+function startOrStopAutoRefresh(): void {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+
+  if (!settings.autoRefreshEnabled) return
+  if (!settings.encryptedPasswordBase64) return
+
+  autoRefreshTimer = setInterval(
+    () => {
+      void runAutoRefreshTick()
+    },
+    5 * 60 * 1000
+  )
+  void runAutoRefreshTick()
+}
+
+async function runAutoRefreshTick(): Promise<void> {
+  if (autoRefreshRunning) return
+  if (!settings.autoRefreshEnabled) return
+  if (!settings.encryptedPasswordBase64) return
+
+  const now = new Date()
+  if (!inBerlinAutoWindow(now)) return
+  if (Date.now() - lastAutoRefreshAtMs < 2 * 60 * 60 * 1000) return
+
+  const username = settings.username
+  if (!username) return
+
+  let password = ''
+  try {
+    password = decryptStoredPassword(settings.encryptedPasswordBase64)
+  } catch {
+    return
+  }
+
+  const { year, month, day } = berlinNowParts(now)
+  autoRefreshRunning = true
+  try {
+    await runSyncWithCredentials(
+      {
+        username,
+        password,
+        year,
+        month,
+        day
+      },
+      'auto'
+    )
+    lastAutoRefreshAtMs = Date.now()
+  } finally {
+    autoRefreshRunning = false
+  }
+}
+
+async function runSyncWithCredentials(
+  args: { username: string; password: string; year: number; month: number; day: number },
+  source: 'manual' | 'saved' | 'auto'
+): Promise<{ ok: true; icsText: string } | { ok: false; error: string; hint?: string }> {
+  const { log, logPath } = createSyncLogger(app.getPath('userData'))
+  log('sync:start', { month: args.month, year: args.year, day: args.day, source })
+
+  const sendStatus = (text: string): void => {
+    mainWindow?.webContents.send('sync-status', { text })
+  }
+
+  const sendResult = (
+    payload:
+      | { ok: true; source: 'manual' | 'saved' | 'auto'; icsText: string }
+      | { ok: false; source: 'manual' | 'saved' | 'auto'; error: string; hint?: string }
+  ): void => {
+    mainWindow?.webContents.send('sync-result', payload)
+  }
+
+  if (source === 'auto') {
+    sendStatus('Stundenplan wird automatisch aktualisiert…')
+  } else {
+    sendStatus('Sync läuft…')
+  }
+
+  const profileDir = join(app.getPath('userData'), 'playwright', 'profile')
+  const cacheDir = join(app.getPath('userData'), 'playwright', 'cache')
+  fs.mkdirSync(profileDir, { recursive: true })
+  fs.mkdirSync(cacheDir, { recursive: true })
+
+  const res = await syncTrainexIcs({
+    username: args.username,
+    password: args.password,
+    year: args.year,
+    month: args.month,
+    day: args.day,
+    log,
+    profileDir,
+    cacheDir,
+    status: sendStatus
+  })
+
+  if (!res.ok) {
+    log('sync:fail', { error: res.error, hasHint: Boolean(res.hint) })
+    const hint = res.hint ? `${res.hint} | Log: ${logPath}` : `Log: ${logPath}`
+    sendStatus(`Sync fehlgeschlagen. Log: ${logPath}`)
+    const out = { ...res, hint }
+    sendResult({ ok: false, source, error: out.error, hint: out.hint })
+    return out
+  }
+
+  const buffer = Buffer.from(res.icsBytesBase64, 'base64')
+  const decoded = decodeIcsText(buffer)
+
+  try {
+    const debugIcsPath = join(app.getPath('userData'), 'logs', 'last-sync.ics')
+    fs.mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true })
+    fs.writeFileSync(debugIcsPath, decoded, 'utf-8')
+    log('sync:wrote-debug-ics', { path: debugIcsPath, decodedChars: decoded.length })
+  } catch {
+    /* ignore */
+  }
+
+  writeLastIcsCache(decoded)
+  log('sync:ok', { bytes: buffer.length, decodedChars: decoded.length })
+  sendStatus(source === 'auto' ? 'Stundenplan automatisch aktualisiert.' : 'Sync abgeschlossen.')
+  sendResult({ ok: true, source, icsText: decoded })
+
+  if (source !== 'auto' && settings.autoRefreshEnabled && settings.encryptedPasswordBase64) {
+    lastAutoRefreshAtMs = Date.now()
+  }
+
+  return { ok: true as const, icsText: decoded }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
@@ -42,6 +218,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  settings = loadSettings()
+  startOrStopAutoRefresh()
   createWindow()
 
   app.on('activate', () => {
@@ -122,43 +300,81 @@ ipcMain.handle(
       day: number
     }
   ) => {
-    const { log, logPath } = createSyncLogger(app.getPath('userData'))
-    log('sync:start', { month: args.month, year: args.year, day: args.day })
+    return runSyncWithCredentials(args, 'manual')
+  }
+)
 
-    const sendStatus = (text: string): void => {
-      mainWindow?.webContents.send('sync-status', { text })
-    }
-    sendStatus('Sync läuft…')
-
-    const profileDir = join(app.getPath('userData'), 'playwright', 'profile')
-    const cacheDir = join(app.getPath('userData'), 'playwright', 'cache')
-    fs.mkdirSync(profileDir, { recursive: true })
-    fs.mkdirSync(cacheDir, { recursive: true })
-
-    const res = await syncTrainexIcs({ ...args, log, profileDir, cacheDir, status: sendStatus })
-    if (!res.ok) {
-      log('sync:fail', { error: res.error, hasHint: Boolean(res.hint) })
-      const hint = res.hint ? `${res.hint} | Log: ${logPath}` : `Log: ${logPath}`
-      sendStatus(`Sync fehlgeschlagen. Log: ${logPath}`)
-      return { ...res, hint }
+ipcMain.handle(
+  'sync-trainex-ics-saved',
+  async (_evt, args: { month: number; year: number; day: number }) => {
+    if (!settings.username || !settings.encryptedPasswordBase64) {
+      return { ok: false as const, error: 'Keine gespeicherten Login-Daten gefunden.' }
     }
 
-    const buffer = Buffer.from(res.icsBytesBase64, 'base64')
-    const decoded = decodeIcsText(buffer)
-
+    let password = ''
     try {
-      const debugIcsPath = join(app.getPath('userData'), 'logs', 'last-sync.ics')
-      fs.mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true })
-      fs.writeFileSync(debugIcsPath, decoded, 'utf-8')
-      log('sync:wrote-debug-ics', { path: debugIcsPath, decodedChars: decoded.length })
+      password = decryptStoredPassword(settings.encryptedPasswordBase64)
     } catch {
-      /* ignore */
+      return {
+        ok: false as const,
+        error: 'Gespeichertes Passwort konnte nicht entschlüsselt werden.'
+      }
     }
 
-    writeLastIcsCache(decoded)
-    log('sync:ok', { bytes: buffer.length, decodedChars: decoded.length })
-    sendStatus('Sync abgeschlossen.')
-    return { ok: true as const, icsText: decoded }
+    return runSyncWithCredentials(
+      {
+        username: settings.username,
+        password,
+        month: args.month,
+        year: args.year,
+        day: args.day
+      },
+      'saved'
+    )
+  }
+)
+
+ipcMain.handle('settings:get', async () => {
+  return toPublicSettings(settings)
+})
+
+ipcMain.handle(
+  'settings:set',
+  async (
+    _evt,
+    args: {
+      username: string
+      savePassword: boolean
+      password?: string
+      autoRefreshEnabled: boolean
+    }
+  ) => {
+    settings = setUsername(settings, args.username)
+    settings = setAutoRefreshEnabled(settings, args.autoRefreshEnabled)
+
+    if (args.savePassword) {
+      if (!canUseEncryption()) {
+        return {
+          ok: false as const,
+          error: 'Verschlüsselung ist auf diesem System nicht verfügbar.'
+        }
+      }
+      if (args.password) {
+        settings = {
+          ...settings,
+          encryptedPasswordBase64: encryptAndStorePassword(args.password)
+        }
+      } else if (!settings.encryptedPasswordBase64) {
+        return { ok: false as const, error: 'Bitte ein Passwort eingeben, um es zu speichern.' }
+      }
+    } else {
+      settings = clearSavedPassword(settings)
+      settings = setAutoRefreshEnabled(settings, false)
+    }
+
+    saveSettings(settings)
+    startOrStopAutoRefresh()
+    return { ok: true as const, settings: toPublicSettings(settings) }
   }
 )
 
