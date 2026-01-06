@@ -235,11 +235,22 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 700,
+    ...(process.platform !== 'darwin'
+      ? {
+          autoHideMenuBar: true
+        }
+      : {}),
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js')
     }
   })
+
+  if (process.platform !== 'darwin') {
+    mainWindow.setAutoHideMenuBar(true)
+    mainWindow.setMenuBarVisibility(false)
+    mainWindow.removeMenu()
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
