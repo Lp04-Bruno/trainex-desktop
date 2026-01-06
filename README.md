@@ -47,7 +47,7 @@ npm run lint
 npm run typecheck
 ```
 
-### Build
+## Build
 
 - `npm run build:win` erstellt den normalen Installer (inkl. gebündeltem Playwright Chromium). Das ist größer, funktioniert aber ohne zusätzlich installierten Browser.
 - `npm run build:win:edge` erstellt einen kleineren Windows-Installer ohne gebündeltes Chromium. Diese Variante nutzt Microsoft Edge über Playwright (`msedge`) und setzt Edge voraus.
