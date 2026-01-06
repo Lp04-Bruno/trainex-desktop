@@ -20,7 +20,7 @@ asarUnpack:
 win:
   executableName: TraiNexDesktop
   signAndEditExecutable: false
-  icon: resources/phwt_logo.png
+  icon: resources/phwt_logo.ico
 
 nsis:
   artifactName: TraiNex-Desktop-${version}-Setup-Requires-Edge.${ext}

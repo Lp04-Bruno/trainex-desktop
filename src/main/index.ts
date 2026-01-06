@@ -39,6 +39,10 @@ function configurePlaywrightBrowsersPath(): void {
 
 configurePlaywrightBrowsersPath()
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.lpreusker.trainexdesktop')
+}
+
 let mainWindow: BrowserWindow | null = null
 
 let settings: AppSettings = { version: 1, username: '', autoRefreshEnabled: false }
@@ -52,10 +56,17 @@ function credentialsHash(username: string, password: string): string {
 }
 
 function resolveWindowIconPath(): string | undefined {
+  const iconFile = process.platform === 'win32' ? 'phwt_logo.ico' : 'phwt_logo.png'
   const candidates = [
+    join(process.cwd(), 'resources', iconFile),
     join(process.cwd(), 'resources', 'phwt_logo.png'),
+
+    join(app.getAppPath(), 'resources', iconFile),
     join(app.getAppPath(), 'resources', 'phwt_logo.png'),
-    join(process.resourcesPath, 'phwt_logo.png')
+    join(process.resourcesPath, iconFile),
+    join(process.resourcesPath, 'phwt_logo.png'),
+    join(process.resourcesPath, 'app.asar.unpacked', 'resources', iconFile),
+    join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'phwt_logo.png')
   ]
   for (const p of candidates) {
     try {
