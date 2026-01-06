@@ -322,6 +322,28 @@ code {
   padding: 10px;
   display: grid;
   gap: 8px;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ev-c-gray-2) 85%, transparent) transparent;
+}
+
+.day-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+.day-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.day-list::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--ev-c-gray-2) 85%, transparent);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.day-list::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--ev-c-gray-1) 85%, transparent);
 }
 
 .day-item {
@@ -331,6 +353,13 @@ code {
   border-radius: 12px;
   padding: 10px 10px;
   cursor: pointer;
+}
+
+.day-item__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .day-item:hover {
@@ -387,6 +416,46 @@ code {
   color: var(--ev-c-text-2);
 }
 
+.agenda__hintRow {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.agenda__hintText {
+  color: var(--ev-c-text-2);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--ev-c-gray-3);
+  background-color: color-mix(in srgb, var(--color-background-mute) 82%, transparent);
+  color: var(--ev-c-text-1);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 650;
+}
+
+.pill--tiny {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.pill--live {
+  border-color: color-mix(in srgb, var(--ev-tint-success) 55%, var(--ev-c-gray-3));
+  background-color: color-mix(in srgb, var(--ev-tint-success) 14%, var(--color-background-mute));
+}
+
+.pill--next {
+  border-color: color-mix(in srgb, var(--ev-tint-info) 50%, var(--ev-c-gray-3));
+  background-color: color-mix(in srgb, var(--ev-tint-info) 12%, var(--color-background-mute));
+}
+
 .agenda__nav {
   display: flex;
   gap: 8px;
@@ -407,6 +476,15 @@ code {
   border-radius: 14px;
   background-color: color-mix(in srgb, var(--color-background-soft) 85%, transparent);
   padding: 12px;
+}
+
+.event-card--current {
+  border-color: color-mix(in srgb, var(--ev-tint-success) 55%, var(--ev-c-gray-3));
+  background-color: color-mix(in srgb, var(--ev-tint-success) 10%, var(--color-background-soft));
+}
+
+.event-card--next {
+  border-color: color-mix(in srgb, var(--ev-tint-info) 50%, var(--ev-c-gray-3));
 }
 
 .event-card__time {

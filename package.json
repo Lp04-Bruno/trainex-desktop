@@ -1,6 +1,6 @@
 {
   "name": "trainex-desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Desktop app to view TraiNex schedules from iCal/ICS",
   "main": "./out/main/index.js",
   "license": "UNLICENSED",

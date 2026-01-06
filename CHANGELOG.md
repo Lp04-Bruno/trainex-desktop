@@ -75,3 +75,16 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Packaged app now uses bundled Playwright browsers only if `resources/playwright-browsers` exists; otherwise Playwright falls back to system browsers
+
+## [0.1.4] - 2026-01-06
+
+### Added
+
+- Planner: highlight current/next event in the agenda
+- Planner: "Heute" badge in the day list
+- Agenda header hint pill with formatted relative time (minutes/hours/days)
+- Day list scrollbar styling aligned with the dark UI
+
+### Fixed
+
+- Windows/Linux: hide the default application menu bar (File/Edit/View)

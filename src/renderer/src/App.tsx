@@ -15,6 +15,13 @@ function dayKeyFromIso(iso: string): string {
   return `${y}-${m}-${day}`
 }
 
+function dayKeyFromDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function formatDayLabel(date: Date): string {
   return date.toLocaleDateString('de-DE', {
     weekday: 'short',
@@ -108,6 +115,42 @@ function formatUpdatedAgo(sinceMs: number): string {
   return `vor ${mins} min`
 }
 
+function minutesCeil(diffMs: number): number {
+  return Math.max(0, Math.ceil(diffMs / 60_000))
+}
+
+function formatRelativeInGerman(diffMs: number): string {
+  const totalMin = minutesCeil(diffMs)
+  if (totalMin <= 0) return 'jetzt'
+
+  if (totalMin < 60) {
+    return totalMin === 1 ? 'in 1 min' : `in ${totalMin} min`
+  }
+
+  const hours = Math.floor(totalMin / 60)
+  const mins = totalMin % 60
+
+  if (hours < 24) {
+    if (hours < 6 && mins !== 0) {
+      return `in ${hours} h ${mins} min`
+    }
+    return hours === 1 ? 'in 1 h' : `in ${hours} h`
+  }
+
+  const days = Math.ceil(totalMin / (60 * 24))
+  return days === 1 ? 'in 1 Tag' : `in ${days} Tagen`
+}
+
+function kindLabelFromEvent(ev: TrainexEvent): { noun: 'Termin' | 'Vorlesung'; nextPrefix: string } {
+  const summary = (ev.summary ?? '').toLowerCase()
+  const cats = (ev.categories ?? []).map((c) => c.toLowerCase())
+  const isVorlesung =
+    cats.some((c) => c.includes('vorlesung')) || summary.includes('vorlesung') || /\bvl\b/.test(summary)
+
+  if (isVorlesung) return { noun: 'Vorlesung', nextPrefix: 'Nächste Vorlesung' }
+  return { noun: 'Termin', nextPrefix: 'Nächster Termin' }
+}
+
 function App(): React.ReactElement {
   const [events, setEvents] = React.useState<TrainexEvent[]>([])
   const [status, setStatus] = React.useState<string>('Noch keine Datei geladen.')
@@ -132,6 +175,7 @@ function App(): React.ReactElement {
   const [lastReloadSuccessMs, setLastReloadSuccessMs] = React.useState<number>(0)
   const [cooldownTick, setCooldownTick] = React.useState<number>(0)
   const [statusTimeTick, setStatusTimeTick] = React.useState<number>(0)
+  const [clockTick, setClockTick] = React.useState<number>(0)
   const syncBusyRef = React.useRef<boolean>(false)
   const [verifiedCredKey, setVerifiedCredKey] = React.useState<string>('')
   const [loadedSettings, setLoadedSettings] = React.useState<{
@@ -173,6 +217,15 @@ function App(): React.ReactElement {
       window.clearInterval(id)
     }
   }, [lastReloadSuccessMs])
+
+  React.useEffect(() => {
+    const id = window.setInterval(() => {
+      setClockTick((x) => x + 1)
+    }, 60_000)
+    return () => {
+      window.clearInterval(id)
+    }
+  }, [])
 
   const showToast = React.useCallback(
     (kind: 'error' | 'success' | 'info', message: string): void => {
@@ -642,6 +695,63 @@ function App(): React.ReactElement {
     return selectedBucket.events.some((ev) => hasTrainexCheckNote(ev.description))
   }, [selectedBucket])
 
+  const todayKey = React.useMemo(() => {
+    void clockTick
+    return dayKeyFromDate(new Date())
+  }, [clockTick])
+
+  const timeline = React.useMemo(() => {
+    void clockTick
+    if (!selectedBucket || selectedBucket.events.length === 0) {
+      return {
+        currentEventId: null as string | null,
+        nextEventId: null as string | null,
+        currentPillText: '' as string,
+        nextPillText: '' as string
+      }
+    }
+
+    const nowMs = Date.now()
+    let current: TrainexEvent | null = null
+    let next: TrainexEvent | null = null
+    let nextStartMs = Number.POSITIVE_INFINITY
+
+    for (const ev of selectedBucket.events) {
+      const startMs = new Date(ev.start).getTime()
+      const endMs = new Date(ev.end).getTime()
+      if (startMs <= nowMs && nowMs < endMs) {
+        current = ev
+      } else if (startMs > nowMs && startMs < nextStartMs) {
+        next = ev
+        nextStartMs = startMs
+      }
+    }
+
+    const currentPillText = current
+      ? (() => {
+          const kind = kindLabelFromEvent(current)
+          const endMs = new Date(current.end).getTime()
+          const rel = formatRelativeInGerman(endMs - nowMs)
+          return rel === 'jetzt' ? `${kind.noun} endet jetzt` : `${kind.noun} endet ${rel}`
+        })()
+      : ''
+
+    const nextPillText = next
+      ? (() => {
+          const kind = kindLabelFromEvent(next)
+          const rel = formatRelativeInGerman(new Date(next.start).getTime() - nowMs)
+          return rel === 'jetzt' ? `${kind.nextPrefix} startet jetzt` : `${kind.nextPrefix} ${rel}`
+        })()
+      : ''
+
+    return {
+      currentEventId: current?.id ?? null,
+      nextEventId: next?.id ?? null,
+      currentPillText,
+      nextPillText
+    }
+  }, [selectedBucket, clockTick])
+
   return (
     <div className="app-shell">
       {toast && (
@@ -966,6 +1076,7 @@ function App(): React.ReactElement {
               <div className="day-list" role="list">
                 {buckets.map((b) => {
                   const active = b.key === selectedDayKey
+                  const isToday = b.key === todayKey
                   return (
                     <button
                       key={b.key}
@@ -973,7 +1084,10 @@ function App(): React.ReactElement {
                       className={active ? 'day-item day-item--active' : 'day-item'}
                       onClick={() => setSelectedDayKey(b.key)}
                     >
-                      <div className="day-item__label">{formatDayLabel(b.date)}</div>
+                      <div className="day-item__row">
+                        <div className="day-item__label">{formatDayLabel(b.date)}</div>
+                        {isToday && <span className="pill pill--tiny">Heute</span>}
+                      </div>
                       <div className="day-item__meta">{formatTermineCount(b.events.length)}</div>
                     </button>
                   )
@@ -988,6 +1102,16 @@ function App(): React.ReactElement {
                 <div className="agenda__title">
                   {selectedBucket ? formatDayLabel(selectedBucket.date) : 'Agenda'}
                 </div>
+                {timeline.currentEventId && (
+                  <div className="agenda__hint">
+                    <span className="pill pill--live">{timeline.currentPillText}</span>
+                  </div>
+                )}
+                {!timeline.currentEventId && timeline.nextEventId && (
+                  <div className="agenda__hint">
+                    <span className="pill pill--next">{timeline.nextPillText}</span>
+                  </div>
+                )}
                 {showTraiNexNote && (
                   <div className="agenda__hint">Aktuelle Termine immer in TraiNex prüfen.</div>
                 )}
@@ -1014,7 +1138,17 @@ function App(): React.ReactElement {
             {selectedBucket && selectedBucket.events.length > 0 ? (
               <div className="event-list" role="list">
                 {selectedBucket.events.map((ev) => (
-                  <div key={ev.id} className="event-card" role="listitem">
+                  <div
+                    key={ev.id}
+                    className={
+                      ev.id === timeline.currentEventId
+                        ? 'event-card event-card--current'
+                        : ev.id === timeline.nextEventId
+                          ? 'event-card event-card--next'
+                          : 'event-card'
+                    }
+                    role="listitem"
+                  >
                     <div className="event-card__time">
                       {formatTime(ev.start)}–{formatTime(ev.end)}
                     </div>
